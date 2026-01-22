@@ -155,22 +155,13 @@ def get_package_versions(
     
     # Fetch from API
     try:
-        if package_manager == "yarn":
-            result = subprocess.run(
-                ["yarn", "npm", "info", package, "versions", "--json"],
-                cwd=str(repo_root),
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
-        else:  # npm
-            result = subprocess.run(
-                ["npm", "view", package, "versions", "--json"],
-                cwd=str(repo_root),
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
+        result = subprocess.run(
+            ["npm", "view", package, "versions", "--json"],
+            cwd=str(repo_root),
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
         
         if result.returncode == 0:
             # yarn npm info returns NDJSON (newline-delimited JSON)
