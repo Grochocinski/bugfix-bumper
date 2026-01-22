@@ -223,21 +223,34 @@ def get_package_versions(
 
 def extract_major_minor(version: str) -> Optional[str]:
     """Extract major.minor from a version string."""
-    # Remove range prefixes (^, ~, >=, etc.) and pre-release suffixes
+    # Skip workspace dependencies and special tags
+    if version.startswith('workspace:') or version in ['latest', 'next', 'beta', 'alpha', 'rc']:
+        return None
+    
+    # Remove range prefixes (^, ~, >=, <=, >, <, =), pre-release suffixes, and build metadata
     clean = re.sub(r'^[^0-9]*', '', version)
-    clean = re.sub(r'-.*$', '', clean)
+    clean = re.sub(r'-.*$', '', clean)  # Remove pre-release (e.g., -alpha.1)
+    clean = re.sub(r'\+.*$', '', clean)  # Remove build metadata (e.g., +build.123)
     
     # Extract major.minor
+    # First try major.minor format
     match = re.match(r'^(\d+)\.(\d+)', clean)
     if match:
         return f"{match.group(1)}.{match.group(2)}"
+    
+    # If that fails, try just major (e.g., "6" -> "6.0")
+    match = re.match(r'^(\d+)$', clean)
+    if match:
+        return f"{match.group(1)}.0"
+    
     return None
 
 
 def extract_base_version(version: str) -> str:
-    """Extract base version number without range prefix."""
+    """Extract base version number without range prefix, pre-release, or build metadata."""
     clean = re.sub(r'^[^0-9]*', '', version)
-    clean = re.sub(r'-.*$', '', clean)
+    clean = re.sub(r'-.*$', '', clean)  # Remove pre-release (e.g., -alpha.1)
+    clean = re.sub(r'\+.*$', '', clean)  # Remove build metadata (e.g., +build.123)
     return clean
 
 
@@ -277,7 +290,13 @@ def find_latest_patch(
         return None
     
     # Sort and get latest
-    matching.sort(key=lambda v: tuple(map(int, v.split('.'))))
+    # Handle versions with varying number of parts (e.g., 1.2.3 vs 1.2.3.4)
+    def version_key(v: str) -> tuple:
+        parts = v.split('.')
+        # Convert to integers, padding with 0s for missing parts
+        return tuple(int(part) if part.isdigit() else 0 for part in parts[:4])  # Limit to 4 parts
+    
+    matching.sort(key=version_key)
     return matching[-1]
 
 
@@ -312,8 +331,12 @@ def process_dependency(
     cache: PackageCache
 ) -> Optional[Dict]:
     """Process a single dependency and return upgrade info if available."""
-    # Skip workspace dependencies
-    if current_version == "*":
+    # Skip workspace dependencies (both "*" and "workspace:*" formats)
+    if current_version == "*" or current_version.startswith("workspace:"):
+        return None
+    
+    # Skip special tags (latest, next, beta, etc.)
+    if current_version in ['latest', 'next', 'beta', 'alpha', 'rc']:
         return None
     
     # Skip git URLs and file paths
@@ -323,15 +346,26 @@ def process_dependency(
     # Extract major.minor
     major_minor = extract_major_minor(current_version)
     if not major_minor:
+        # Only log debug for cases we haven't already explicitly skipped
+        # (these are likely malformed or unsupported version formats)
+        if not (current_version.startswith("workspace:") or current_version in ['latest', 'next', 'beta', 'alpha', 'rc']):
+            print(f"DEBUG: Could not extract major.minor from '{current_version}' for package '{package}'", file=sys.stderr)
         return None
     
     # Get base version for comparison
     base_version = extract_base_version(current_version)
+    # Handle versions with or without patch numbers (e.g., "1.2" -> patch 0, "1.2.3" -> patch 3)
     patch_match = re.match(r'^\d+\.\d+\.(\d+)', base_version)
-    if not patch_match:
-        return None
-    
-    current_patch = int(patch_match.group(1))
+    if patch_match:
+        current_patch = int(patch_match.group(1))
+    else:
+        # Version without patch number (e.g., "1.2") - treat as patch 0
+        minor_match = re.match(r'^\d+\.\d+$', base_version)
+        if minor_match:
+            current_patch = 0
+        else:
+            # Can't parse version
+            return None
     
     # Find latest patch version
     latest_version = find_latest_patch(
@@ -339,6 +373,9 @@ def process_dependency(
     )
     
     if not latest_version:
+        # Debug: log when we can't find latest patch (might indicate a bug)
+        if package == "async":
+            print(f"DEBUG: Could not find latest patch for '{package}' with major.minor '{major_minor}' and current version '{current_version}'", file=sys.stderr)
         return None
     
     # Extract patch number from latest version
