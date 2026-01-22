@@ -1,0 +1,6 @@
+# Generated upgrade reports
+patch-upgrades.json
+patch-upgrades-summary.md
+
+# Backup directories created by apply script
+.package-json-backups-*/
