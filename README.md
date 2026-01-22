@@ -11,13 +11,11 @@ A tool to automatically find and apply patch version upgrades for npm packages i
 - **Multi-package manager** - Supports Yarn and npm
 - **Detailed reports** - JSON and markdown summaries for easy review
 - **Automatic backups** - Creates backups before applying changes
+- **Smart caching** - Caches package version data to reduce redundant API calls (6-hour TTL, configurable)
 
 ## Requirements
 
-- `bash` (version 4.0+)
-- `jq` (JSON processor)
-  - macOS: `brew install jq`
-  - Linux: `apt-get install jq` or `yum install jq`
+- Python 3.6+ (no external dependencies required)
 - `yarn` or `npm` (depending on your project)
 
 ## Installation
@@ -30,8 +28,8 @@ git clone <repository-url> bugfix-bumper
 cd bugfix-bumper
 
 # Or copy the scripts to your project
-cp bugfix-bumper-*.sh /path/to/your/project/
-chmod +x bugfix-bumper-*.sh
+cp bugfix-bumper-*.py /path/to/your/project/
+chmod +x bugfix-bumper-*.py
 ```
 
 ## Quick Start
@@ -39,7 +37,7 @@ chmod +x bugfix-bumper-*.sh
 ### Step 1: Generate Upgrade Report
 
 ```bash
-./bugfix-bumper-generate.sh
+./bugfix-bumper-generate.py
 ```
 
 This will:
@@ -60,7 +58,7 @@ Open `patch-upgrades-summary.md` to review all suggested upgrades. You can:
 ### Step 3: Apply Upgrades
 
 ```bash
-./bugfix-bumper-apply.sh patch-upgrades.json
+./bugfix-bumper-apply.py patch-upgrades.json
 ```
 
 This will:
@@ -82,10 +80,10 @@ npm install
 
 ## Command-Line Options
 
-### `bugfix-bumper-generate.sh`
+### `bugfix-bumper-generate.py`
 
 ```
-Usage: bugfix-bumper-generate.sh [OPTIONS]
+Usage: bugfix-bumper-generate.py [OPTIONS]
 
 OPTIONS:
     -r, --root DIR              Repository root directory (default: current directory)
@@ -93,16 +91,21 @@ OPTIONS:
     -p, --package-manager PM     Force package manager: yarn or npm (default: auto-detect)
     --no-dev                     Exclude devDependencies
     --no-prod                    Exclude dependencies
+    --clear-cache                Clear the persistent cache file before running
+    --refresh-cache              Alias for --clear-cache
+    --no-cache                   Skip using cache for this run only
+    --cache-ttl HOURS            Cache TTL in hours (default: 6.0)
     -h, --help                  Show this help message
 ```
 
-### `bugfix-bumper-apply.sh`
+### `bugfix-bumper-apply.py`
 
 ```
-Usage: bugfix-bumper-apply.sh [OPTIONS] <upgrade-report.json>
+Usage: bugfix-bumper-apply.py [OPTIONS] <upgrade-report.json>
 
 OPTIONS:
     -r, --root DIR              Repository root directory (default: current directory)
+    --no-backup                  Skip creating backups of package.json files
     -h, --help                  Show this help message
 
 ARGUMENTS:
@@ -115,50 +118,63 @@ ARGUMENTS:
 
 ```bash
 # Generate report in current directory
-./bugfix-bumper-generate.sh
+./bugfix-bumper-generate.py
 
 # Review the generated files
 cat patch-upgrades-summary.md
 
 # Apply the upgrades
-./bugfix-bumper-apply.sh patch-upgrades.json
+./bugfix-bumper-apply.py patch-upgrades.json
 ```
 
 ### Custom Output Directory
 
 ```bash
 # Generate reports in a specific directory
-./bugfix-bumper-generate.sh --output-dir ./reports
+./bugfix-bumper-generate.py --output-dir ./reports
 
 # Apply from that directory
-./bugfix-bumper-apply.sh ./reports/patch-upgrades.json
+./bugfix-bumper-apply.py ./reports/patch-upgrades.json
 ```
 
 ### Different Repository Root
 
 ```bash
 # Scan a different repository
-./bugfix-bumper-generate.sh --root /path/to/other/repo
+./bugfix-bumper-generate.py --root /path/to/other/repo
 
 # Apply upgrades to that repository
-./bugfix-bumper-apply.sh --root /path/to/other/repo patch-upgrades.json
+./bugfix-bumper-apply.py --root /path/to/other/repo patch-upgrades.json
 ```
 
 ### Force Package Manager
 
 ```bash
 # Force npm even if yarn.lock exists
-./bugfix-bumper-generate.sh --package-manager npm
+./bugfix-bumper-generate.py --package-manager npm
 ```
 
 ### Exclude Dependency Types
 
 ```bash
 # Only check dependencies (skip devDependencies)
-./bugfix-bumper-generate.sh --no-dev
+./bugfix-bumper-generate.py --no-dev
 
 # Only check devDependencies (skip dependencies)
-./bugfix-bumper-generate.sh --no-prod
+./bugfix-bumper-generate.py --no-prod
+```
+
+### Cache Management
+
+```bash
+# Clear cache and force fresh fetch
+./bugfix-bumper-generate.py --clear-cache
+
+# Skip cache for this run (doesn't delete cache file)
+./bugfix-bumper-generate.py --no-cache
+
+# Custom cache TTL (12 hours)
+./bugfix-bumper-generate.py --cache-ttl 12
 ```
 
 ## How It Works
@@ -172,9 +188,10 @@ cat patch-upgrades-summary.md
 3. **Version Analysis**: For each dependency:
    - Extracts the current version constraint (e.g., `^1.2.3`)
    - Determines the major.minor version (e.g., `1.2`)
-   - Queries the package registry for all available versions
+   - Queries the package registry for all available versions (uses cache when available)
    - Finds the latest patch version within the same major.minor (e.g., `1.2.5`)
    - Filters out pre-release versions (anything with `-`)
+   - Caches results to reduce redundant API calls (6-hour TTL by default)
 
 4. **Report Generation**: Creates a JSON report with all upgrade candidates
 
@@ -239,13 +256,48 @@ Human-readable markdown report with:
 - **Patch-only upgrades**: Only suggests upgrades within the same major.minor version
 - **No pre-releases**: Filters out unstable versions
 
+## Caching
+
+The generate script uses a persistent cache to reduce redundant API calls:
+
+- **Cache location**: `.bugfix-bumper-cache.json` in the repository root
+- **Default TTL**: 6 hours (configurable with `--cache-ttl`)
+- **Automatic refresh**: Stale entries are refreshed on next access
+- **Cache management**:
+  - `--clear-cache` or `--refresh-cache`: Delete cache and force fresh fetch
+  - `--no-cache`: Skip cache for this run only (doesn't delete file)
+- **Benefits**: Significantly faster runs when scanning many packages, especially in monorepos
+
+## Testing
+
+To run tests, first install the test dependencies:
+
+```bash
+pip install -r requirements-test.txt
+```
+
+Then run the test suite:
+
+```bash
+# Run all tests
+pytest
+
+# Run with coverage report
+pytest --cov=. --cov-report=html
+
+# Run specific test file
+pytest tests/test_generate.py
+
+# Run specific test
+pytest tests/test_generate.py::test_extract_major_minor
+
+# Verbose output
+pytest -v
+```
+
+The scripts themselves require no external dependencies - only the tests need pytest and related packages.
+
 ## Troubleshooting
-
-### "jq is required but not installed"
-
-Install jq:
-- macOS: `brew install jq`
-- Linux: `apt-get install jq` or `yum install jq`
 
 ### "Could not detect package manager"
 
