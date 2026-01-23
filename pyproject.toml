@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
-    {name = "Blend Labs"}
+    {name = "William Grochocinski"}
 ]
 keywords = ["npm", "yarn", "package", "version", "upgrade", "bugfix", "patch"]
 classifiers = [
@@ -112,6 +112,17 @@ indent-style = "space"
 skip-magic-trailing-comma = false
 # Auto-detect line endings
 line-ending = "auto"
+
+[tool.ty]
+# Type checker configuration (Astral)
+
+[tool.ty.analysis]
+# Respect type: ignore comments
+respect-type-ignore-comments = true
+
+[tool.ty.rules]
+# Configure rule severity (ignore, warn, or error)
+# Most rules default to error, but you can customize specific ones if needed
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
