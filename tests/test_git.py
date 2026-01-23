@@ -3,6 +3,7 @@
 from bugfix_bumper.files import restore_all_backups
 from bugfix_bumper.git import (
     add_gitignore_patterns,
+    gitignore_patterns,
     is_git_repo,
     remove_gitignore_patterns,
 )
@@ -158,6 +159,46 @@ class TestGitignoreHandling:
             content = exclude_file.read_text()
             # Patterns should be removed
             assert "*.old" not in content or content.strip() == ""
+
+    def test_gitignore_patterns_context_manager(self, git_repo_dir):
+        """gitignore_patterns context manager adds and removes patterns automatically."""
+        exclude_file = git_repo_dir / ".git" / "info" / "exclude"
+        assert not exclude_file.exists() or "*.old" not in exclude_file.read_text()
+
+        # Use context manager
+        with gitignore_patterns(git_repo_dir) as added:
+            # Patterns should be added
+            assert len(added) > 0
+            assert exclude_file.exists()
+            content = exclude_file.read_text()
+            assert "*.old" in content
+            assert "node_modules.old/" in content
+
+        # Patterns should be removed after context exits
+        if exclude_file.exists():
+            content_after = exclude_file.read_text()
+            assert "*.old" not in content_after or content_after.strip() == ""
+            assert "node_modules.old/" not in content_after or content_after.strip() == ""
+
+    def test_gitignore_patterns_context_manager_with_exception(self, git_repo_dir):
+        """gitignore_patterns context manager removes patterns even on exception."""
+        exclude_file = git_repo_dir / ".git" / "info" / "exclude"
+
+        # Use context manager and raise an exception
+        try:
+            with gitignore_patterns(git_repo_dir):
+                assert exclude_file.exists()
+                content = exclude_file.read_text()
+                assert "*.old" in content
+                # Raise an exception
+                raise ValueError("Test exception")
+        except ValueError:
+            pass
+
+        # Patterns should still be removed even after exception
+        if exclude_file.exists():
+            content_after = exclude_file.read_text()
+            assert "*.old" not in content_after or content_after.strip() == ""
 
     def test_add_gitignore_patterns_oserror(self, git_repo_dir, mocker):
         """OSError when writing to .git/info/exclude (handles gracefully)."""

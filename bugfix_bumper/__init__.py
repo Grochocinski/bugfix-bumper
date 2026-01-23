@@ -11,6 +11,7 @@ from bugfix_bumper.files import (
 )
 from bugfix_bumper.git import (
     add_gitignore_patterns,
+    gitignore_patterns,
     is_git_repo,
     remove_gitignore_patterns,
 )
@@ -32,6 +33,7 @@ from bugfix_bumper.version import (
 __all__ = [
     "PackageCache",
     "add_gitignore_patterns",
+    "gitignore_patterns",
     "apply_upgrades",
     "backup_files",
     "check_package_manager",

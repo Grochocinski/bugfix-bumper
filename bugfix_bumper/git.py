@@ -1,6 +1,7 @@
 """Git repository utilities."""
 
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 from typing import List
 
@@ -89,3 +90,23 @@ def remove_gitignore_patterns(repo_root: Path, patterns: List[str]) -> None:
     except OSError as e:
         # Log warning but don't fail the script
         print(f"Warning: Could not update .git/info/exclude: {e}", file=sys.stderr)
+
+
+@contextmanager
+def gitignore_patterns(repo_root: Path):
+    """
+    Context manager for temporarily adding gitignore patterns.
+    
+    Adds patterns on entry and removes them on exit (even if an exception occurs).
+    
+    Example:
+        with gitignore_patterns(repo_root):
+            # Do work that creates .old files
+            apply_upgrades(...)
+        # Patterns are automatically removed here
+    """
+    added_patterns = add_gitignore_patterns(repo_root)
+    try:
+        yield added_patterns
+    finally:
+        remove_gitignore_patterns(repo_root, added_patterns)

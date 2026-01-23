@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 from bugfix_bumper.files import restore_all_backups
-from bugfix_bumper.git import add_gitignore_patterns, remove_gitignore_patterns
+from bugfix_bumper.git import gitignore_patterns
 from bugfix_bumper.processing import apply_upgrades
 
 
@@ -64,14 +64,10 @@ NOTES:
             print(f"Error: Repository root does not exist: {repo_root}", file=sys.stderr)
             sys.exit(1)
 
-        # Add gitignore patterns before restore
-        added_patterns = add_gitignore_patterns(repo_root)
-        try:
+        # Add gitignore patterns before restore, automatically removed on exit
+        with gitignore_patterns(repo_root):
             restored = restore_all_backups(repo_root)
             sys.exit(0 if restored > 0 else 1)
-        finally:
-            # Always remove patterns we added, even on error
-            remove_gitignore_patterns(repo_root, added_patterns)
 
     # Validate upgrades_file is provided when not using --restore
     if not args.upgrades_file:
@@ -131,14 +127,10 @@ NOTES:
 
     print()
 
-    # Add gitignore patterns before applying upgrades
-    added_patterns = add_gitignore_patterns(repo_root)
-    try:
+    # Add gitignore patterns before applying upgrades, automatically removed on exit
+    with gitignore_patterns(repo_root):
         # Apply upgrades
         apply_upgrades(repo_root, upgrades, create_backups=args.backup)
-    finally:
-        # Always remove patterns we added, even on error
-        remove_gitignore_patterns(repo_root, added_patterns)
 
 
 if __name__ == "__main__":
