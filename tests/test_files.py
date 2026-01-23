@@ -1,0 +1,247 @@
+"""Tests for bugfix_bumper.files module."""
+
+import json
+
+from bugfix_bumper.files import (
+    backup_files,
+    cleanup_backups,
+    find_backup_files,
+    find_package_json_files,
+    restore_all_backups,
+    restore_files,
+)
+
+
+class TestFindPackageJsonFiles:
+    """Tests for find_package_json_files function."""
+
+    def test_root_only_no_workspaces(self, temp_dir, sample_package_json):
+        """Root package.json only (no workspaces)."""
+        package_json = temp_dir / "package.json"
+
+        with open(package_json, "w") as f:
+            json.dump(sample_package_json, f)
+
+        result = find_package_json_files(temp_dir)
+        assert len(result) == 1
+        assert result[0] == package_json
+
+    def test_with_workspaces(self, temp_dir):
+        """With workspaces (finds all workspace package.json files)."""
+        package_json = temp_dir / "package.json"
+
+        # Use explicit workspace paths (not globs) since function doesn't handle globs
+        workspace_config = {
+            "name": "monorepo",
+            "version": "1.0.0",
+            "workspaces": ["packages/pkg1", "packages/pkg2", "apps/app1"],
+            "dependencies": {"express": "^4.18.1"},
+        }
+        with open(package_json, "w") as f:
+            json.dump(workspace_config, f)
+
+        # Create workspace package.json files
+        (temp_dir / "packages" / "pkg1").mkdir(parents=True)
+        (temp_dir / "packages" / "pkg2").mkdir(parents=True)
+        (temp_dir / "apps" / "app1").mkdir(parents=True)
+
+        pkg1_json = temp_dir / "packages" / "pkg1" / "package.json"
+        pkg2_json = temp_dir / "packages" / "pkg2" / "package.json"
+        app1_json = temp_dir / "apps" / "app1" / "package.json"
+
+        for pkg_json in [pkg1_json, pkg2_json, app1_json]:
+            with open(pkg_json, "w") as f:
+                json.dump({"name": "test"}, f)
+
+        result = find_package_json_files(temp_dir)
+        assert len(result) == 4  # root + 3 workspaces
+        assert package_json in result
+        assert pkg1_json in result
+        assert pkg2_json in result
+        assert app1_json in result
+
+    def test_workspace_package_json_not_exists(self, temp_dir, sample_package_json_with_workspaces):
+        """Workspace package.json doesn't exist (skips it)."""
+        package_json = temp_dir / "package.json"
+
+        with open(package_json, "w") as f:
+            json.dump(sample_package_json_with_workspaces, f)
+
+        # Don't create workspace package.json files
+        result = find_package_json_files(temp_dir)
+        assert len(result) == 1  # Only root
+        assert result[0] == package_json
+
+    def test_invalid_json_in_root(self, temp_dir):
+        """Invalid JSON in root package.json (handles gracefully)."""
+        package_json = temp_dir / "package.json"
+        with open(package_json, "w") as f:
+            f.write("invalid json{")
+
+        result = find_package_json_files(temp_dir)
+        assert result == [package_json]  # Still returns root path
+
+    def test_no_workspaces_key(self, temp_dir, sample_package_json):
+        """No workspaces key (returns root only)."""
+        package_json = temp_dir / "package.json"
+
+        with open(package_json, "w") as f:
+            json.dump(sample_package_json, f)
+
+        result = find_package_json_files(temp_dir)
+        assert len(result) == 1
+        assert result[0] == package_json
+
+    def test_empty_workspaces_array(self, temp_dir):
+        """Empty workspaces array."""
+        package_json = temp_dir / "package.json"
+
+        with open(package_json, "w") as f:
+            json.dump({"workspaces": []}, f)
+
+        result = find_package_json_files(temp_dir)
+        assert len(result) == 1
+        assert result[0] == package_json
+
+
+class TestBackupFiles:
+    """Tests for backup_files function."""
+
+    def test_backup_package_json(self, temp_dir):
+        """Backup package.json file."""
+        package_json = temp_dir / "package.json"
+        package_json.write_text('{"name": "test"}')
+
+        backup_paths = backup_files(package_json)
+
+        assert "package.json" in backup_paths
+        assert backup_paths["package.json"].exists()
+        assert backup_paths["package.json"].name == "package.json.old"
+        assert not package_json.exists()  # Original renamed
+
+    def test_backup_package_lock(self, temp_dir):
+        """Backup package-lock.json if exists."""
+        package_json = temp_dir / "package.json"
+        package_json.write_text('{"name": "test"}')
+        lock_file = temp_dir / "package-lock.json"
+        lock_file.write_text("{}")
+
+        backup_paths = backup_files(package_json)
+
+        assert "package-lock.json" in backup_paths
+        assert backup_paths["package-lock.json"].exists()
+
+    def test_backup_node_modules(self, temp_dir):
+        """Backup node_modules directory if exists."""
+        package_json = temp_dir / "package.json"
+        package_json.write_text('{"name": "test"}')
+        node_modules = temp_dir / "node_modules"
+        node_modules.mkdir()
+        (node_modules / "some-package").mkdir()
+
+        backup_paths = backup_files(package_json)
+
+        assert "node_modules" in backup_paths
+        assert backup_paths["node_modules"].is_dir()
+        assert backup_paths["node_modules"].name == "node_modules.old"
+
+
+class TestRestoreFiles:
+    """Tests for restore_files function."""
+
+    def test_restore_file(self, temp_dir):
+        """Restore a file from .old backup."""
+        package_json_old = temp_dir / "package.json.old"
+        package_json_old.write_text('{"name": "test"}')
+
+        backup_paths = {"package.json": package_json_old}
+        restore_files(backup_paths)
+
+        package_json = temp_dir / "package.json"
+        assert package_json.exists()
+        assert not package_json_old.exists()
+
+    def test_restore_directory(self, temp_dir):
+        """Restore a directory from .old backup."""
+        node_modules_old = temp_dir / "node_modules.old"
+        node_modules_old.mkdir()
+        (node_modules_old / "package").mkdir()
+
+        backup_paths = {"node_modules": node_modules_old}
+        restore_files(backup_paths)
+
+        node_modules = temp_dir / "node_modules"
+        assert node_modules.exists()
+        assert node_modules.is_dir()
+        assert not node_modules_old.exists()
+
+
+class TestFindBackupFiles:
+    """Tests for find_backup_files function."""
+
+    def test_find_single_backup(self, temp_dir):
+        """Find single package.json.old file."""
+        package_json_old = temp_dir / "package.json.old"
+        package_json_old.write_text('{"name": "test"}')
+
+        result = find_backup_files(temp_dir)
+
+        assert len(result) == 1
+        assert "package.json" in result[0]
+
+    def test_find_multiple_backups(self, temp_dir):
+        """Find multiple backup files."""
+        (temp_dir / "app1").mkdir()
+        (temp_dir / "app2").mkdir()
+
+        (temp_dir / "package.json.old").write_text('{"name": "root"}')
+        (temp_dir / "app1" / "package.json.old").write_text('{"name": "app1"}')
+        (temp_dir / "app2" / "package.json.old").write_text('{"name": "app2"}')
+
+        result = find_backup_files(temp_dir)
+
+        assert len(result) == 3
+
+
+class TestRestoreAllBackups:
+    """Tests for restore_all_backups function."""
+
+    def test_no_backups_found(self, temp_dir):
+        """No backups found."""
+        result = restore_all_backups(temp_dir)
+        assert result == 0
+
+    def test_restore_single_backup(self, temp_dir):
+        """Restore single backup."""
+        package_json_old = temp_dir / "package.json.old"
+        package_json_old.write_text('{"name": "test"}')
+
+        result = restore_all_backups(temp_dir)
+
+        assert result >= 1  # At least 1 item restored
+        assert (temp_dir / "package.json").exists()
+        assert not package_json_old.exists()
+
+
+class TestCleanupBackups:
+    """Tests for cleanup_backups function."""
+
+    def test_cleanup_when_keep_false(self, temp_dir):
+        """Cleanup when keep_backups=False."""
+        package_json_old = temp_dir / "package.json.old"
+        package_json_old.write_text('{"name": "test"}')
+
+        backup_paths = {"package.json": package_json_old}
+        cleanup_backups(backup_paths, keep_backups=False)
+
+        assert not package_json_old.exists()
+
+    def test_keep_when_keep_true(self, temp_dir):
+        """Keep backups when keep_backups=True."""
+        package_json_old = temp_dir / "package.json.old"
+        package_json_old.write_text('{"name": "test"}')
+
+        backup_paths = {"package.json": package_json_old}
+        cleanup_backups(backup_paths, keep_backups=True)
+
+        assert package_json_old.exists()

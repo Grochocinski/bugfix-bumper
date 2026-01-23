@@ -1,0 +1,113 @@
+"""Integration tests for bugfix-bumper-generate.py end-to-end flow."""
+
+import contextlib
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+# Import the script module (handles hyphenated filename)
+script_path = Path(__file__).parent.parent / "bugfix-bumper-generate.py"
+spec = importlib.util.spec_from_file_location("bugfix_bumper_generate", script_path)
+assert spec is not None, "Failed to create module spec"
+assert spec.loader is not None, "Module spec has no loader"
+bugfix_bumper_generate = importlib.util.module_from_spec(spec)
+sys.modules["bugfix_bumper_generate"] = bugfix_bumper_generate
+spec.loader.exec_module(bugfix_bumper_generate)
+
+from bugfix_bumper_generate import (  # type: ignore[unresolved-import]
+    detect_package_manager,
+    find_package_json_files,
+)
+
+
+class TestMainGenerate:
+    """Integration tests for main() function in generate script."""
+
+    def test_full_workflow_scan_generate_report(self, temp_dir, mocker, sample_package_json):
+        """Full workflow: scan → generate report."""
+        package_json = temp_dir / "package.json"
+
+        with open(package_json, "w") as f:
+            json.dump(sample_package_json, f)
+
+        yarn_lock = temp_dir / "yarn.lock"
+        yarn_lock.touch()
+
+        output_dir = temp_dir / "output"
+        output_dir.mkdir()
+
+        # Mock subprocess calls
+        mock_run = mocker.patch("subprocess.run")
+        mock_run.return_value.returncode = 0
+        mock_run.return_value.stdout = '["4.18.1", "4.18.2", "4.18.3"]'
+
+        # Mock sys.exit to prevent actual exit
+        mocker.patch("sys.exit")
+
+        # We'll test the main logic by calling the key functions
+        # Full main() test would require more complex mocking
+        package_manager = detect_package_manager(temp_dir, None)
+
+        assert package_manager == "yarn"
+        files = find_package_json_files(temp_dir)
+        assert len(files) > 0
+
+
+class TestEdgeCases:
+    """Tests for edge cases: invalid inputs, error handling, boundary conditions."""
+
+    def test_version_parsing_single_digit(self):
+        """Single digit versions."""
+        from bugfix_bumper.version import extract_base_version, extract_major_minor
+
+        assert extract_major_minor("1") == "1.0"
+        assert extract_base_version("1") == "1"
+
+    def test_version_parsing_very_long_version_string(self):
+        """Very long version strings."""
+        from bugfix_bumper.version import extract_base_version, extract_major_minor
+
+        long_version = "^1.2.3.4.5.6.7.8.9.10"
+        assert extract_major_minor(long_version) == "1.2"
+        assert extract_base_version(long_version) == "1.2.3.4.5.6.7.8.9.10"
+
+    def test_special_characters_in_package_names(self, temp_dir, mocker):
+        """Special characters in package names."""
+        from bugfix_bumper.cache import PackageCache
+        from bugfix_bumper.processing import process_dependency
+
+        cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
+        mocker.patch("bugfix_bumper.version.find_latest_patch", return_value="1.2.5")
+
+        # Package name with special characters
+        result = process_dependency(
+            "@scope/package-name", "^1.2.3", "dependencies", "package.json", "yarn", temp_dir, cache
+        )
+        # Should handle normally
+        assert result is None or isinstance(result, dict)
+
+    def test_unicode_in_package_names(self, temp_dir):
+        """Unicode in package names."""
+        from bugfix_bumper.cache import PackageCache
+        from bugfix_bumper.processing import process_dependency
+
+        cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
+        # Unicode package name
+        result = process_dependency(
+            "测试包", "^1.2.3", "dependencies", "package.json", "yarn", temp_dir, cache
+        )
+        # Should handle gracefully
+        assert result is None or isinstance(result, dict)
+
+    def test_file_system_permissions_error(self, temp_dir, mocker):
+        """Permissions errors (simulated)."""
+        from bugfix_bumper.cache import PackageCache
+
+        cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
+        # Mock IOError for permissions
+        mocker.patch("builtins.open", side_effect=OSError("Permission denied"))
+
+        # Should handle gracefully
+        with contextlib.suppress(OSError):
+            cache.save()

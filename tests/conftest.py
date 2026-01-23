@@ -85,3 +85,18 @@ def create_cache_file(path: Path, content: Dict):
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w") as f:
         json.dump(content, f, indent=2)
+
+
+@pytest.fixture
+def git_repo_dir(temp_dir):
+    """Create a temporary directory with .git/info/ structure."""
+    git_dir = temp_dir / ".git" / "info"
+    git_dir.mkdir(parents=True, exist_ok=True)
+    return temp_dir
+
+
+@pytest.fixture
+def git_exclude_file(git_repo_dir):
+    """Create .git/info/exclude file with optional initial content."""
+    exclude_file = git_repo_dir / ".git" / "info" / "exclude"
+    return exclude_file
