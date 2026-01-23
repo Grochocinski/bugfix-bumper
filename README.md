@@ -36,7 +36,7 @@ npm install
 
 ## Requirements
 
-- Python 3.6+ (no external dependencies required)
+- Python 3.8+ (no external dependencies required)
 - `yarn` or `npm` (depending on your project)
 
 ## Installation
