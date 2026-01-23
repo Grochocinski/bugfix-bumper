@@ -1,4 +1,6 @@
 """Tests for bugfix-bumper-generate.py"""
+
+import contextlib
 import importlib.util
 import sys
 from pathlib import Path
@@ -8,11 +10,13 @@ import pytest
 # Import the script module (handles hyphenated filename)
 script_path = Path(__file__).parent.parent / "bugfix-bumper-generate.py"
 spec = importlib.util.spec_from_file_location("bugfix_bumper_generate", script_path)
+assert spec is not None, "Failed to create module spec"
+assert spec.loader is not None, "Module spec has no loader"
 bugfix_bumper_generate = importlib.util.module_from_spec(spec)
 sys.modules["bugfix_bumper_generate"] = bugfix_bumper_generate
 spec.loader.exec_module(bugfix_bumper_generate)
 
-from bugfix_bumper_generate import (
+from bugfix_bumper_generate import (  # type: ignore[unresolved-import]
     PackageCache,
     check_package_manager,
     detect_package_manager,
@@ -126,12 +130,13 @@ class TestPackageCache:
         cache_file = temp_dir / "cache.json"
         import json
         import time
+
         # Make cache entries fresh
         sample_cache_data["yarn:express"]["cached_at"] = time.time()
         sample_cache_data["npm:lodash"]["cached_at"] = time.time()
-        with open(cache_file, 'w') as f:
+        with open(cache_file, "w") as f:
             json.dump(sample_cache_data, f)
-        
+
         cache = PackageCache(cache_file, ttl_hours=6.0, use_cache=True)
         assert "yarn:express" in cache.cache
         assert "npm:lodash" in cache.cache
@@ -141,12 +146,13 @@ class TestPackageCache:
         cache_file = temp_dir / "cache.json"
         import json
         import time
+
         # Make cache entries very old (100 hours ago)
         sample_cache_data["yarn:express"]["cached_at"] = time.time() - 360000
         sample_cache_data["npm:lodash"]["cached_at"] = time.time() - 360000
-        with open(cache_file, 'w') as f:
+        with open(cache_file, "w") as f:
             json.dump(sample_cache_data, f)
-        
+
         cache = PackageCache(cache_file, ttl_hours=6.0, use_cache=True)
         # Stale entries should be filtered out
         assert len(cache.cache) == 0
@@ -154,9 +160,9 @@ class TestPackageCache:
     def test_init_invalid_json_cache_file(self, temp_dir):
         """Initialize with invalid JSON cache file."""
         cache_file = temp_dir / "cache.json"
-        with open(cache_file, 'w') as f:
+        with open(cache_file, "w") as f:
             f.write("invalid json{")
-        
+
         cache = PackageCache(cache_file, ttl_hours=6.0, use_cache=True)
         # Should handle gracefully and start fresh
         assert cache.cache == {}
@@ -166,10 +172,11 @@ class TestPackageCache:
         cache_file = temp_dir / "cache.json"
         import json
         import time
+
         sample_cache_data["yarn:express"]["cached_at"] = time.time()
-        with open(cache_file, 'w') as f:
+        with open(cache_file, "w") as f:
             json.dump(sample_cache_data, f)
-        
+
         cache = PackageCache(cache_file, ttl_hours=6.0, use_cache=False)
         assert cache.cache == {}
         assert not cache.use_cache
@@ -186,7 +193,7 @@ class TestPackageCache:
         cache = PackageCache(cache_file, ttl_hours=6.0, use_cache=True)
         versions = ["1.0.0", "1.0.1", "1.0.2"]
         cache.set("yarn", "test-package", versions)
-        
+
         result = cache.get("yarn", "test-package")
         assert result == versions
         assert cache.cache_hits == 1
@@ -197,10 +204,11 @@ class TestPackageCache:
         cache_file = temp_dir / "cache.json"
         import json
         import time
+
         sample_cache_data["yarn:express"]["cached_at"] = time.time()
-        with open(cache_file, 'w') as f:
+        with open(cache_file, "w") as f:
             json.dump(sample_cache_data, f)
-        
+
         cache = PackageCache(cache_file, ttl_hours=6.0, use_cache=True)
         result = cache.get("yarn", "express")
         assert result == ["4.18.1", "4.18.2", "4.18.3"]
@@ -229,7 +237,7 @@ class TestPackageCache:
         cache = PackageCache(cache_file, ttl_hours=6.0, use_cache=True)
         versions = ["1.0.0", "1.0.1"]
         cache.set("yarn", "test-package", versions)
-        
+
         assert "yarn:test-package" in cache.in_memory
         assert "yarn:test-package" in cache.cache
         assert cache.cache["yarn:test-package"]["versions"] == versions
@@ -249,10 +257,11 @@ class TestPackageCache:
         cache = PackageCache(cache_file, ttl_hours=6.0, use_cache=True)
         cache.set("yarn", "test-package", ["1.0.0"])
         cache.save()
-        
+
         assert cache_file.exists()
         import json
-        with open(cache_file, 'r') as f:
+
+        with open(cache_file) as f:
             data = json.load(f)
         assert "yarn:test-package" in data
 
@@ -261,10 +270,11 @@ class TestPackageCache:
         cache_file = temp_dir / "cache.json"
         cache = PackageCache(cache_file, ttl_hours=6.0, use_cache=True)
         cache.save()
-        
+
         assert cache_file.exists()
         import json
-        with open(cache_file, 'r') as f:
+
+        with open(cache_file) as f:
             data = json.load(f)
         assert data == {}
 
@@ -274,7 +284,7 @@ class TestPackageCache:
         cache = PackageCache(cache_file, ttl_hours=6.0, use_cache=True)
         cache.set("yarn", "test-package", ["1.0.0"])
         cache.save()
-        
+
         cache.clear()
         assert cache.cache == {}
         assert cache.in_memory == {}
@@ -296,7 +306,7 @@ class TestPackageCache:
         cache.get("yarn", "pkg1")  # Hit
         cache.get("npm", "pkg2")  # Hit
         cache.get("yarn", "unknown")  # Miss
-        
+
         stats = cache.get_stats()
         assert stats["cached_packages"] == 2
         assert stats["cache_hits"] == 2
@@ -347,7 +357,7 @@ class TestCheckPackageManager:
 
     def test_valid_package_manager(self, mocker):
         """Valid package manager (yarn/npm installed)."""
-        mock_run = mocker.patch('subprocess.run')
+        mock_run = mocker.patch("subprocess.run")
         mock_run.return_value.returncode = 0
         # Should not raise
         try:
@@ -357,34 +367,36 @@ class TestCheckPackageManager:
 
     def test_unknown_package_manager(self, mocker):
         """Unknown package manager (exits with error)."""
-        mocker.patch('builtins.print')
+        mocker.patch("builtins.print")
         # sys.exit raises SystemExit
         with pytest.raises(SystemExit):
             check_package_manager("unknown")
 
     def test_package_manager_not_installed(self, mocker):
         """Package manager not installed (FileNotFoundError)."""
-        mock_run = mocker.patch('subprocess.run')
+        mock_run = mocker.patch("subprocess.run")
         mock_run.side_effect = FileNotFoundError()
-        mocker.patch('builtins.print')
+        mocker.patch("builtins.print")
         with pytest.raises(SystemExit):
             check_package_manager("yarn")
 
     def test_command_timeout(self, mocker):
         """Command timeout (TimeoutExpired)."""
         from subprocess import TimeoutExpired
-        mock_run = mocker.patch('subprocess.run')
+
+        mock_run = mocker.patch("subprocess.run")
         mock_run.side_effect = TimeoutExpired("yarn", 5)
-        mocker.patch('builtins.print')
+        mocker.patch("builtins.print")
         with pytest.raises(SystemExit):
             check_package_manager("yarn")
 
     def test_command_fails(self, mocker):
         """Command fails (CalledProcessError)."""
         from subprocess import CalledProcessError
-        mock_run = mocker.patch('subprocess.run')
+
+        mock_run = mocker.patch("subprocess.run")
         mock_run.side_effect = CalledProcessError(1, "yarn")
-        mocker.patch('builtins.print')
+        mocker.patch("builtins.print")
         with pytest.raises(SystemExit):
             check_package_manager("yarn")
 
@@ -392,22 +404,22 @@ class TestCheckPackageManager:
 class TestGetPackageVersions:
     """Tests for get_package_versions function."""
 
-    def test_cache_hit(self, temp_dir, mocker):
+    def test_cache_hit(self, temp_dir):
         """Cache hit (returns cached versions)."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
         versions = ["1.0.0", "1.0.1", "1.0.2"]
         cache.set("yarn", "test-package", versions)
-        
+
         result = get_package_versions("yarn", "test-package", temp_dir, cache)
         assert result == versions
 
     def test_cache_miss_yarn_succeeds(self, temp_dir, mocker):
         """Cache miss, yarn command succeeds (array format)."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mock_run = mocker.patch('subprocess.run')
+        mock_run = mocker.patch("subprocess.run")
         mock_run.return_value.returncode = 0
         mock_run.return_value.stdout = '["1.0.0", "1.0.1", "1.0.2"]'
-        
+
         result = get_package_versions("yarn", "test-package", temp_dir, cache)
         assert result == ["1.0.0", "1.0.1", "1.0.2"]
         # Verify cache was updated
@@ -416,39 +428,40 @@ class TestGetPackageVersions:
     def test_cache_miss_npm_succeeds(self, temp_dir, mocker):
         """Cache miss, npm command succeeds (object with 'versions' key)."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mock_run = mocker.patch('subprocess.run')
+        mock_run = mocker.patch("subprocess.run")
         mock_run.return_value.returncode = 0
         mock_run.return_value.stdout = '{"versions": ["1.0.0", "1.0.1"]}'
-        
+
         result = get_package_versions("npm", "test-package", temp_dir, cache)
         assert result == ["1.0.0", "1.0.1"]
 
     def test_cache_miss_command_fails(self, temp_dir, mocker):
         """Cache miss, command fails (returns empty list)."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mock_run = mocker.patch('subprocess.run')
+        mock_run = mocker.patch("subprocess.run")
         mock_run.return_value.returncode = 1
-        
+
         result = get_package_versions("yarn", "test-package", temp_dir, cache)
         assert result == []
 
     def test_cache_miss_invalid_json(self, temp_dir, mocker):
         """Cache miss, invalid JSON (returns empty list)."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mock_run = mocker.patch('subprocess.run')
+        mock_run = mocker.patch("subprocess.run")
         mock_run.return_value.returncode = 0
-        mock_run.return_value.stdout = 'invalid json'
-        
+        mock_run.return_value.stdout = "invalid json"
+
         result = get_package_versions("yarn", "test-package", temp_dir, cache)
         assert result == []
 
     def test_cache_miss_timeout(self, temp_dir, mocker):
         """Cache miss, timeout (returns empty list)."""
         from subprocess import TimeoutExpired
+
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mock_run = mocker.patch('subprocess.run')
+        mock_run = mocker.patch("subprocess.run")
         mock_run.side_effect = TimeoutExpired("yarn", 30)
-        
+
         result = get_package_versions("yarn", "test-package", temp_dir, cache)
         assert result == []
 
@@ -459,50 +472,52 @@ class TestFindLatestPatch:
     def test_find_latest_patch_same_major_minor(self, temp_dir, mocker):
         """Find latest patch in same major.minor."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mocker.patch('bugfix_bumper_generate.get_package_versions', return_value=[
-            "1.2.0", "1.2.1", "1.2.2", "1.2.3", "1.3.0"
-        ])
-        
+        mocker.patch(
+            "bugfix_bumper_generate.get_package_versions",
+            return_value=["1.2.0", "1.2.1", "1.2.2", "1.2.3", "1.3.0"],
+        )
+
         result = find_latest_patch("test-package", "1.2.1", "1.2", "yarn", temp_dir, cache)
         assert result == "1.2.3"
 
     def test_filter_pre_release_versions(self, temp_dir, mocker):
         """Filter out pre-release versions (with `-`)."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mocker.patch('bugfix_bumper_generate.get_package_versions', return_value=[
-            "1.2.1", "1.2.2", "1.2.3-beta.1", "1.2.4"
-        ])
-        
+        mocker.patch(
+            "bugfix_bumper_generate.get_package_versions",
+            return_value=["1.2.1", "1.2.2", "1.2.3-beta.1", "1.2.4"],
+        )
+
         result = find_latest_patch("test-package", "1.2.1", "1.2", "yarn", temp_dir, cache)
         assert result == "1.2.4"  # Should skip 1.2.3-beta.1
 
     def test_no_matching_versions(self, temp_dir, mocker):
         """No matching versions (returns None)."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mocker.patch('bugfix_bumper_generate.get_package_versions', return_value=[
-            "1.3.0", "1.3.1"
-        ])
-        
+        mocker.patch("bugfix_bumper_generate.get_package_versions", return_value=["1.3.0", "1.3.1"])
+
         result = find_latest_patch("test-package", "1.2.1", "1.2", "yarn", temp_dir, cache)
         assert result is None
 
     def test_multiple_patches_returns_highest(self, temp_dir, mocker):
         """Multiple patches, returns highest."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mocker.patch('bugfix_bumper_generate.get_package_versions', return_value=[
-            "1.2.0", "1.2.5", "1.2.1", "1.2.9", "1.2.3"
-        ])
-        
+        mocker.patch(
+            "bugfix_bumper_generate.get_package_versions",
+            return_value=["1.2.0", "1.2.5", "1.2.1", "1.2.9", "1.2.3"],
+        )
+
         result = find_latest_patch("test-package", "1.2.1", "1.2", "yarn", temp_dir, cache)
         assert result == "1.2.9"
 
     def test_versions_out_of_order_sorts_correctly(self, temp_dir, mocker):
         """Versions out of order (sorts correctly)."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mocker.patch('bugfix_bumper_generate.get_package_versions', return_value=[
-            "1.2.10", "1.2.2", "1.2.9", "1.2.1"
-        ])
-        
+        mocker.patch(
+            "bugfix_bumper_generate.get_package_versions",
+            return_value=["1.2.10", "1.2.2", "1.2.9", "1.2.1"],
+        )
+
         result = find_latest_patch("test-package", "1.2.1", "1.2", "yarn", temp_dir, cache)
         assert result == "1.2.10"
 
@@ -514,9 +529,10 @@ class TestFindPackageJsonFiles:
         """Root package.json only (no workspaces)."""
         package_json = temp_dir / "package.json"
         import json
-        with open(package_json, 'w') as f:
+
+        with open(package_json, "w") as f:
             json.dump(sample_package_json, f)
-        
+
         result = find_package_json_files(temp_dir)
         assert len(result) == 1
         assert result[0] == package_json
@@ -525,35 +541,30 @@ class TestFindPackageJsonFiles:
         """With workspaces (finds all workspace package.json files)."""
         package_json = temp_dir / "package.json"
         import json
+
         # Use explicit workspace paths (not globs) since function doesn't handle globs
         workspace_config = {
             "name": "monorepo",
             "version": "1.0.0",
-            "workspaces": [
-                "packages/pkg1",
-                "packages/pkg2",
-                "apps/app1"
-            ],
-            "dependencies": {
-                "express": "^4.18.1"
-            }
+            "workspaces": ["packages/pkg1", "packages/pkg2", "apps/app1"],
+            "dependencies": {"express": "^4.18.1"},
         }
-        with open(package_json, 'w') as f:
+        with open(package_json, "w") as f:
             json.dump(workspace_config, f)
-        
+
         # Create workspace package.json files
         (temp_dir / "packages" / "pkg1").mkdir(parents=True)
         (temp_dir / "packages" / "pkg2").mkdir(parents=True)
         (temp_dir / "apps" / "app1").mkdir(parents=True)
-        
+
         pkg1_json = temp_dir / "packages" / "pkg1" / "package.json"
         pkg2_json = temp_dir / "packages" / "pkg2" / "package.json"
         app1_json = temp_dir / "apps" / "app1" / "package.json"
-        
+
         for pkg_json in [pkg1_json, pkg2_json, app1_json]:
-            with open(pkg_json, 'w') as f:
+            with open(pkg_json, "w") as f:
                 json.dump({"name": "test"}, f)
-        
+
         result = find_package_json_files(temp_dir)
         assert len(result) == 4  # root + 3 workspaces
         assert package_json in result
@@ -565,9 +576,10 @@ class TestFindPackageJsonFiles:
         """Workspace package.json doesn't exist (skips it)."""
         package_json = temp_dir / "package.json"
         import json
-        with open(package_json, 'w') as f:
+
+        with open(package_json, "w") as f:
             json.dump(sample_package_json_with_workspaces, f)
-        
+
         # Don't create workspace package.json files
         result = find_package_json_files(temp_dir)
         assert len(result) == 1  # Only root
@@ -576,9 +588,9 @@ class TestFindPackageJsonFiles:
     def test_invalid_json_in_root(self, temp_dir):
         """Invalid JSON in root package.json (handles gracefully)."""
         package_json = temp_dir / "package.json"
-        with open(package_json, 'w') as f:
+        with open(package_json, "w") as f:
             f.write("invalid json{")
-        
+
         result = find_package_json_files(temp_dir)
         assert len(result) == 1  # Still returns root path
 
@@ -586,9 +598,10 @@ class TestFindPackageJsonFiles:
         """No workspaces key (returns root only)."""
         package_json = temp_dir / "package.json"
         import json
-        with open(package_json, 'w') as f:
+
+        with open(package_json, "w") as f:
             json.dump(sample_package_json, f)
-        
+
         result = find_package_json_files(temp_dir)
         assert len(result) == 1
         assert result[0] == package_json
@@ -597,9 +610,10 @@ class TestFindPackageJsonFiles:
         """Empty workspaces array."""
         package_json = temp_dir / "package.json"
         import json
-        with open(package_json, 'w') as f:
+
+        with open(package_json, "w") as f:
             json.dump({"workspaces": []}, f)
-        
+
         result = find_package_json_files(temp_dir)
         assert len(result) == 1
         assert result[0] == package_json
@@ -611,11 +625,10 @@ class TestProcessDependency:
     def test_valid_upgrade_available(self, temp_dir, mocker):
         """Valid upgrade available (returns upgrade dict)."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mocker.patch('bugfix_bumper_generate.find_latest_patch', return_value="1.2.5")
-        
+        mocker.patch("bugfix_bumper_generate.find_latest_patch", return_value="1.2.5")
+
         result = process_dependency(
-            "test-package", "^1.2.3", "dependencies", "package.json",
-            "yarn", temp_dir, cache
+            "test-package", "^1.2.3", "dependencies", "package.json", "yarn", temp_dir, cache
         )
         assert result is not None
         assert result["package"] == "test-package"
@@ -627,11 +640,10 @@ class TestProcessDependency:
     def test_no_upgrade_available(self, temp_dir, mocker):
         """No upgrade available (current is latest)."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mocker.patch('bugfix_bumper_generate.find_latest_patch', return_value="1.2.3")
-        
+        mocker.patch("bugfix_bumper_generate.find_latest_patch", return_value="1.2.3")
+
         result = process_dependency(
-            "test-package", "^1.2.3", "dependencies", "package.json",
-            "yarn", temp_dir, cache
+            "test-package", "^1.2.3", "dependencies", "package.json", "yarn", temp_dir, cache
         )
         assert result is None  # No upgrade available
 
@@ -639,8 +651,7 @@ class TestProcessDependency:
         """Workspace dependency (`*`) → None."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
         result = process_dependency(
-            "workspace-pkg", "*", "dependencies", "package.json",
-            "yarn", temp_dir, cache
+            "workspace-pkg", "*", "dependencies", "package.json", "yarn", temp_dir, cache
         )
         assert result is None
 
@@ -648,8 +659,13 @@ class TestProcessDependency:
         """Git URL → None."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
         result = process_dependency(
-            "test-package", "git+https://github.com/user/repo.git", "dependencies", "package.json",
-            "yarn", temp_dir, cache
+            "test-package",
+            "git+https://github.com/user/repo.git",
+            "dependencies",
+            "package.json",
+            "yarn",
+            temp_dir,
+            cache,
         )
         assert result is None
 
@@ -657,8 +673,13 @@ class TestProcessDependency:
         """File path → None."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
         result = process_dependency(
-            "test-package", "./local-package", "dependencies", "package.json",
-            "yarn", temp_dir, cache
+            "test-package",
+            "./local-package",
+            "dependencies",
+            "package.json",
+            "yarn",
+            temp_dir,
+            cache,
         )
         assert result is None
 
@@ -666,41 +687,37 @@ class TestProcessDependency:
         """Invalid version format → None."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
         result = process_dependency(
-            "test-package", "invalid", "dependencies", "package.json",
-            "yarn", temp_dir, cache
+            "test-package", "invalid", "dependencies", "package.json", "yarn", temp_dir, cache
         )
         assert result is None
 
     def test_preserves_range_prefix_caret(self, temp_dir, mocker):
         """Preserves range prefix (^)."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mocker.patch('bugfix_bumper_generate.find_latest_patch', return_value="1.2.5")
-        
+        mocker.patch("bugfix_bumper_generate.find_latest_patch", return_value="1.2.5")
+
         result = process_dependency(
-            "test-package", "^1.2.3", "dependencies", "package.json",
-            "yarn", temp_dir, cache
+            "test-package", "^1.2.3", "dependencies", "package.json", "yarn", temp_dir, cache
         )
         assert result["proposed"] == "^1.2.5"
 
     def test_preserves_range_prefix_tilde(self, temp_dir, mocker):
         """Preserves range prefix (~)."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mocker.patch('bugfix_bumper_generate.find_latest_patch', return_value="1.2.5")
-        
+        mocker.patch("bugfix_bumper_generate.find_latest_patch", return_value="1.2.5")
+
         result = process_dependency(
-            "test-package", "~1.2.3", "dependencies", "package.json",
-            "yarn", temp_dir, cache
+            "test-package", "~1.2.3", "dependencies", "package.json", "yarn", temp_dir, cache
         )
         assert result["proposed"] == "~1.2.5"
 
     def test_exact_version_stays_exact(self, temp_dir, mocker):
         """Exact version stays exact."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mocker.patch('bugfix_bumper_generate.find_latest_patch', return_value="1.2.5")
-        
+        mocker.patch("bugfix_bumper_generate.find_latest_patch", return_value="1.2.5")
+
         result = process_dependency(
-            "test-package", "1.2.3", "dependencies", "package.json",
-            "yarn", temp_dir, cache
+            "test-package", "1.2.3", "dependencies", "package.json", "yarn", temp_dir, cache
         )
         assert result["proposed"] == "1.2.5"  # No prefix
 
@@ -712,15 +729,19 @@ class TestProcessPackageJson:
         """Process dependencies only (include_prod=True, include_dev=False)."""
         package_json = temp_dir / "package.json"
         import json
-        with open(package_json, 'w') as f:
+
+        with open(package_json, "w") as f:
             json.dump(sample_package_json, f)
-        
+
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mocker.patch('bugfix_bumper_generate.process_dependency', return_value={
-            "package": "express", "current": "^4.18.1", "proposed": "^4.18.3"
-        })
-        
-        result = process_package_json(package_json, temp_dir, "yarn", include_dev=False, include_prod=True, cache=cache)
+        mocker.patch(
+            "bugfix_bumper_generate.process_dependency",
+            return_value={"package": "express", "current": "^4.18.1", "proposed": "^4.18.3"},
+        )
+
+        result = process_package_json(
+            package_json, temp_dir, "yarn", include_dev=False, include_prod=True, cache=cache
+        )
         # Should only process dependencies, not devDependencies
         assert len(result) == 2  # express and lodash
 
@@ -728,15 +749,19 @@ class TestProcessPackageJson:
         """Process devDependencies only (include_prod=False, include_dev=True)."""
         package_json = temp_dir / "package.json"
         import json
-        with open(package_json, 'w') as f:
+
+        with open(package_json, "w") as f:
             json.dump(sample_package_json, f)
-        
+
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mocker.patch('bugfix_bumper_generate.process_dependency', return_value={
-            "package": "jest", "current": "^29.0.0", "proposed": "^29.0.5"
-        })
-        
-        result = process_package_json(package_json, temp_dir, "yarn", include_dev=True, include_prod=False, cache=cache)
+        mocker.patch(
+            "bugfix_bumper_generate.process_dependency",
+            return_value={"package": "jest", "current": "^29.0.0", "proposed": "^29.0.5"},
+        )
+
+        result = process_package_json(
+            package_json, temp_dir, "yarn", include_dev=True, include_prod=False, cache=cache
+        )
         # Should only process devDependencies
         assert len(result) == 2  # jest and typescript
 
@@ -744,15 +769,19 @@ class TestProcessPackageJson:
         """Process both."""
         package_json = temp_dir / "package.json"
         import json
-        with open(package_json, 'w') as f:
+
+        with open(package_json, "w") as f:
             json.dump(sample_package_json, f)
-        
+
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mocker.patch('bugfix_bumper_generate.process_dependency', return_value={
-            "package": "test", "current": "1.0.0", "proposed": "1.0.1"
-        })
-        
-        result = process_package_json(package_json, temp_dir, "yarn", include_dev=True, include_prod=True, cache=cache)
+        mocker.patch(
+            "bugfix_bumper_generate.process_dependency",
+            return_value={"package": "test", "current": "1.0.0", "proposed": "1.0.1"},
+        )
+
+        result = process_package_json(
+            package_json, temp_dir, "yarn", include_dev=True, include_prod=True, cache=cache
+        )
         assert len(result) == 4  # 2 deps + 2 devDeps
 
     def test_file_not_exists(self, temp_dir):
@@ -765,9 +794,9 @@ class TestProcessPackageJson:
     def test_invalid_json(self, temp_dir):
         """Invalid JSON (returns empty list)."""
         package_json = temp_dir / "package.json"
-        with open(package_json, 'w') as f:
+        with open(package_json, "w") as f:
             f.write("invalid json{")
-        
+
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
         result = process_package_json(package_json, temp_dir, "yarn", True, True, cache)
         assert result == []
@@ -776,9 +805,10 @@ class TestProcessPackageJson:
         """Empty dependencies/devDependencies."""
         package_json = temp_dir / "package.json"
         import json
-        with open(package_json, 'w') as f:
+
+        with open(package_json, "w") as f:
             json.dump({"name": "test", "dependencies": {}, "devDependencies": {}}, f)
-        
+
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
         result = process_package_json(package_json, temp_dir, "yarn", True, True, cache)
         assert result == []
@@ -812,7 +842,7 @@ class TestGenerateSummary:
                 "proposed": "^4.18.3",
                 "majorMinor": "4.18",
                 "currentPatch": 1,
-                "proposedPatch": 3
+                "proposedPatch": 3,
             },
             {
                 "package": "express",
@@ -822,8 +852,8 @@ class TestGenerateSummary:
                 "proposed": "^4.18.3",
                 "majorMinor": "4.18",
                 "currentPatch": 1,
-                "proposedPatch": 3
-            }
+                "proposedPatch": 3,
+            },
         ]
         result = generate_summary(upgrades, "yarn", temp_dir)
         assert "express" in result
@@ -855,7 +885,7 @@ class TestGenerateSummary:
                 "proposed": "^4.18.3",
                 "majorMinor": "4.18",
                 "currentPatch": 1,
-                "proposedPatch": 3
+                "proposedPatch": 3,
             },
             {
                 "package": "lodash",
@@ -865,8 +895,8 @@ class TestGenerateSummary:
                 "proposed": "~4.17.21",
                 "majorMinor": "4.17",
                 "currentPatch": 20,
-                "proposedPatch": 21
-            }
+                "proposedPatch": 21,
+            },
         ]
         result = generate_summary(upgrades, "yarn", temp_dir)
         # Should have both packages listed
@@ -881,7 +911,8 @@ class TestGenerateSummary:
         assert "Generated:" in result
         # Should have a date-like format
         import re
-        assert re.search(r'\d{4}-\d{2}-\d{2}', result) is not None
+
+        assert re.search(r"\d{4}-\d{2}-\d{2}", result) is not None
 
 
 class TestMainGenerate:
@@ -891,43 +922,28 @@ class TestMainGenerate:
         """Full workflow: scan → generate report."""
         package_json = temp_dir / "package.json"
         import json
-        with open(package_json, 'w') as f:
+
+        with open(package_json, "w") as f:
             json.dump(sample_package_json, f)
-        
+
         yarn_lock = temp_dir / "yarn.lock"
         yarn_lock.touch()
-        
+
         output_dir = temp_dir / "output"
         output_dir.mkdir()
-        
+
         # Mock subprocess calls
-        mock_run = mocker.patch('subprocess.run')
+        mock_run = mocker.patch("subprocess.run")
         mock_run.return_value.returncode = 0
         mock_run.return_value.stdout = '["4.18.1", "4.18.2", "4.18.3"]'
-        
+
         # Mock sys.exit to prevent actual exit
-        mocker.patch('sys.exit')
-        
-        # Import and call main with mocked args
-        import argparse
-        args = argparse.Namespace(
-            root=str(temp_dir),
-            output_dir=str(output_dir),
-            package_manager=None,
-            no_dev=False,
-            no_prod=False,
-            clear_cache=False,
-            refresh_cache=False,
-            no_cache=False,
-            cache_ttl=6.0
-        )
-        
+        mocker.patch("sys.exit")
+
         # We'll test the main logic by calling the key functions
         # Full main() test would require more complex mocking
-        cache_file = temp_dir / ".bugfix-bumper-cache.json"
-        cache = PackageCache(cache_file, 6.0, True)
         package_manager = detect_package_manager(temp_dir, None)
-        
+
         assert package_manager == "yarn"
         files = find_package_json_files(temp_dir)
         assert len(files) > 0
@@ -950,12 +966,11 @@ class TestEdgeCases:
     def test_special_characters_in_package_names(self, temp_dir, mocker):
         """Special characters in package names."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mocker.patch('bugfix_bumper_generate.find_latest_patch', return_value="1.2.5")
-        
+        mocker.patch("bugfix_bumper_generate.find_latest_patch", return_value="1.2.5")
+
         # Package name with special characters
         result = process_dependency(
-            "@scope/package-name", "^1.2.3", "dependencies", "package.json",
-            "yarn", temp_dir, cache
+            "@scope/package-name", "^1.2.3", "dependencies", "package.json", "yarn", temp_dir, cache
         )
         # Should handle normally
         assert result is None or isinstance(result, dict)
@@ -965,8 +980,7 @@ class TestEdgeCases:
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
         # Unicode package name
         result = process_dependency(
-            "测试包", "^1.2.3", "dependencies", "package.json",
-            "yarn", temp_dir, cache
+            "测试包", "^1.2.3", "dependencies", "package.json", "yarn", temp_dir, cache
         )
         # Should handle gracefully
         assert result is None or isinstance(result, dict)
@@ -975,21 +989,18 @@ class TestEdgeCases:
         """Permissions errors (simulated)."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
         # Mock IOError for permissions
-        mocker.patch('builtins.open', side_effect=IOError("Permission denied"))
-        
+        mocker.patch("builtins.open", side_effect=OSError("Permission denied"))
+
         # Should handle gracefully
-        try:
+        with contextlib.suppress(OSError):
             cache.save()
-        except IOError:
-            # Cache save should fail silently
-            pass
 
     def test_cache_corrupted_file(self, temp_dir):
         """Corrupted cache file."""
         cache_file = temp_dir / "cache.json"
-        with open(cache_file, 'w') as f:
+        with open(cache_file, "w") as f:
             f.write("not json at all{{{")
-        
+
         # Should handle gracefully
         cache = PackageCache(cache_file, ttl_hours=6.0, use_cache=True)
         assert cache.cache == {}
@@ -999,16 +1010,12 @@ class TestEdgeCases:
         cache_file = temp_dir / "cache.json"
         import json
         import time
+
         # Entry from 1000 hours ago
-        old_data = {
-            "yarn:test": {
-                "versions": ["1.0.0"],
-                "cached_at": time.time() - 3600000
-            }
-        }
-        with open(cache_file, 'w') as f:
+        old_data = {"yarn:test": {"versions": ["1.0.0"], "cached_at": time.time() - 3600000}}
+        with open(cache_file, "w") as f:
             json.dump(old_data, f)
-        
+
         cache = PackageCache(cache_file, ttl_hours=6.0, use_cache=True)
         # Should filter out old entry
         assert len(cache.cache) == 0
@@ -1018,52 +1025,51 @@ class TestEdgeCases:
         cache_file = temp_dir / "cache.json"
         cache = PackageCache(cache_file, ttl_hours=6.0, use_cache=True)
         cache.set("yarn", "test", ["1.0.0"])
-        
+
         # Mock IOError for read-only
-        mocker.patch('builtins.open', side_effect=IOError("Read-only file system"))
-        
+        mocker.patch("builtins.open", side_effect=OSError("Read-only file system"))
+
         # Should fail silently
-        try:
+        with contextlib.suppress(OSError):
             cache.save()
-        except IOError:
-            pass
 
     def test_subprocess_network_timeout(self, temp_dir, mocker):
         """Network timeouts."""
         from subprocess import TimeoutExpired
+
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mock_run = mocker.patch('subprocess.run')
+        mock_run = mocker.patch("subprocess.run")
         mock_run.side_effect = TimeoutExpired("yarn", 30)
-        
+
         result = get_package_versions("yarn", "test-package", temp_dir, cache)
         assert result == []
 
     def test_subprocess_registry_errors(self, temp_dir, mocker):
         """Registry errors."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mock_run = mocker.patch('subprocess.run')
+        mock_run = mocker.patch("subprocess.run")
         mock_run.return_value.returncode = 1
-        
+
         result = get_package_versions("yarn", "test-package", temp_dir, cache)
         assert result == []
 
     def test_subprocess_package_not_found(self, temp_dir, mocker):
         """Package not found."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mock_run = mocker.patch('subprocess.run')
+        mock_run = mocker.patch("subprocess.run")
         mock_run.return_value.returncode = 1
         mock_run.return_value.stdout = '{"error": "Not found"}'
-        
+
         result = get_package_versions("yarn", "nonexistent-package", temp_dir, cache)
         assert result == []
 
     def test_subprocess_malformed_json_responses(self, temp_dir, mocker):
         """Malformed JSON responses."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mock_run = mocker.patch('subprocess.run')
+        mock_run = mocker.patch("subprocess.run")
         mock_run.return_value.returncode = 0
         mock_run.return_value.stdout = '{"incomplete": json'
-        
+
         result = get_package_versions("yarn", "test-package", temp_dir, cache)
         assert result == []
 
@@ -1085,10 +1091,10 @@ class TestEdgeCases:
         cache_file = temp_dir / "cache.json"
         cache1 = PackageCache(cache_file, ttl_hours=6.0, use_cache=True)
         cache2 = PackageCache(cache_file, ttl_hours=6.0, use_cache=True)
-        
+
         cache1.set("yarn", "test", ["1.0.0"])
         cache1.save()
-        
+
         # Second cache should load the data
         cache2 = PackageCache(cache_file, ttl_hours=6.0, use_cache=True)
         result = cache2.get("yarn", "test")
@@ -1122,13 +1128,16 @@ class TestEdgeCases:
         """With --no-dev."""
         package_json = temp_dir / "package.json"
         import json
-        with open(package_json, 'w') as f:
+
+        with open(package_json, "w") as f:
             json.dump(sample_package_json, f)
-        
+
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mocker.patch('bugfix_bumper_generate.process_dependency', return_value=None)
-        
-        result = process_package_json(package_json, temp_dir, "yarn", include_dev=False, include_prod=True, cache=cache)
+        mocker.patch("bugfix_bumper_generate.process_dependency", return_value=None)
+
+        result = process_package_json(
+            package_json, temp_dir, "yarn", include_dev=False, include_prod=True, cache=cache
+        )
         # Should process dependencies but not devDependencies
         # Since we're mocking process_dependency to return None, result will be empty
         # But the function should have been called for dependencies only
@@ -1138,46 +1147,45 @@ class TestEdgeCases:
         """With --no-prod."""
         package_json = temp_dir / "package.json"
         import json
-        with open(package_json, 'w') as f:
+
+        with open(package_json, "w") as f:
             json.dump(sample_package_json, f)
-        
+
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mocker.patch('bugfix_bumper_generate.process_dependency', return_value=None)
-        
-        result = process_package_json(package_json, temp_dir, "yarn", include_dev=True, include_prod=False, cache=cache)
+        mocker.patch("bugfix_bumper_generate.process_dependency", return_value=None)
+
+        result = process_package_json(
+            package_json, temp_dir, "yarn", include_dev=True, include_prod=False, cache=cache
+        )
         assert isinstance(result, list)
 
     def test_multiple_workspaces(self, temp_dir):
         """Multiple workspaces."""
         package_json = temp_dir / "package.json"
         import json
+
         # Use explicit workspace paths (not globs) since function doesn't handle globs
         workspace_config = {
             "name": "monorepo",
             "version": "1.0.0",
-            "workspaces": [
-                "packages/pkg1",
-                "packages/pkg2"
-            ],
-            "dependencies": {
-                "express": "^4.18.1"
-            }
+            "workspaces": ["packages/pkg1", "packages/pkg2"],
+            "dependencies": {"express": "^4.18.1"},
         }
-        with open(package_json, 'w') as f:
+        with open(package_json, "w") as f:
             json.dump(workspace_config, f)
-        
+
         (temp_dir / "packages" / "pkg1").mkdir(parents=True)
         (temp_dir / "packages" / "pkg2").mkdir(parents=True)
-        
+
         for pkg_dir in ["pkg1", "pkg2"]:
             pkg_json = temp_dir / "packages" / pkg_dir / "package.json"
-            with open(pkg_json, 'w') as f:
+            with open(pkg_json, "w") as f:
                 json.dump({"name": pkg_dir}, f)
-        
+
         files = find_package_json_files(temp_dir)
         assert len(files) == 3  # root + 2 workspaces
 
-    def test_error_handling_missing_package_json(self, temp_dir, mocker):
+    def test_error_handling_missing_package_json(self, temp_dir):
         """Error handling (missing package.json, invalid repo root)."""
         # Test detect_package_manager with no package.json
         result = detect_package_manager(temp_dir, None)

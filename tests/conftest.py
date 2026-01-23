@@ -1,8 +1,9 @@
 """Shared pytest fixtures and utilities for bugfix-bumper tests."""
+
 import json
 import tempfile
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict
 
 import pytest
 
@@ -20,14 +21,8 @@ def sample_package_json():
     return {
         "name": "test-package",
         "version": "1.0.0",
-        "dependencies": {
-            "express": "^4.18.1",
-            "lodash": "~4.17.21"
-        },
-        "devDependencies": {
-            "jest": "^29.0.0",
-            "typescript": "~4.9.0"
-        }
+        "dependencies": {"express": "^4.18.1", "lodash": "~4.17.21"},
+        "devDependencies": {"jest": "^29.0.0", "typescript": "~4.9.0"},
     }
 
 
@@ -37,13 +32,8 @@ def sample_package_json_with_workspaces():
     return {
         "name": "monorepo",
         "version": "1.0.0",
-        "workspaces": [
-            "packages/*",
-            "apps/*"
-        ],
-        "dependencies": {
-            "express": "^4.18.1"
-        }
+        "workspaces": ["packages/*", "apps/*"],
+        "dependencies": {"express": "^4.18.1"},
     }
 
 
@@ -51,14 +41,8 @@ def sample_package_json_with_workspaces():
 def sample_cache_data():
     """Sample cache data."""
     return {
-        "yarn:express": {
-            "versions": ["4.18.1", "4.18.2", "4.18.3"],
-            "cached_at": 1000000000.0
-        },
-        "npm:lodash": {
-            "versions": ["4.17.20", "4.17.21"],
-            "cached_at": 1000000000.0
-        }
+        "yarn:express": {"versions": ["4.18.1", "4.18.2", "4.18.3"], "cached_at": 1000000000.0},
+        "npm:lodash": {"versions": ["4.17.20", "4.17.21"], "cached_at": 1000000000.0},
     }
 
 
@@ -74,7 +58,7 @@ def sample_upgrades():
             "proposed": "^4.18.3",
             "majorMinor": "4.18",
             "currentPatch": 1,
-            "proposedPatch": 3
+            "proposedPatch": 3,
         },
         {
             "package": "jest",
@@ -84,20 +68,20 @@ def sample_upgrades():
             "proposed": "^29.0.5",
             "majorMinor": "29.0",
             "currentPatch": 0,
-            "proposedPatch": 5
-        }
+            "proposedPatch": 5,
+        },
     ]
 
 
 def create_package_json(path: Path, content: Dict):
     """Helper to create a package.json file."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, 'w') as f:
+    with open(path, "w") as f:
         json.dump(content, f, indent=2)
 
 
 def create_cache_file(path: Path, content: Dict):
     """Helper to create a cache file."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, 'w') as f:
+    with open(path, "w") as f:
         json.dump(content, f, indent=2)
