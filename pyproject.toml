@@ -31,6 +31,10 @@ test = [
     "pytest-mock>=3.10.0",
     "pytest-cov>=4.0.0",
 ]
+dev = [
+    "ruff>=0.14.0",
+    "ty>=0.0.13",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -99,6 +103,7 @@ known-first-party = ["bugfix_bumper"]
 # Tests can have longer lines and more complex logic
 "tests/*.py" = [
     "E501",
+    "E402",    # Module level import not at top (intentional for dynamic imports in tests)
     "PLR2004", # Magic value used in comparison
     "S101",    # Use of assert detected
 ]
