@@ -1,0 +1,113 @@
+name: Test
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Test on minimum supported version and latest stable
+        python-version: ["3.8", "3.14"]
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+      
+      - name: Install dependencies
+        run: |
+          uv sync --extra test --extra dev
+      
+      - name: Run pytest (all tests)
+        run: |
+          uv run pytest tests/ -v
+      
+      - name: Run pytest with coverage
+        run: |
+          uv run pytest --cov=bugfix_bumper --cov=tests --cov-report=term --cov-report=json --cov-report=xml -q
+        continue-on-error: false
+      
+      - name: Check bugfix_bumper/ coverage (90% required)
+        run: |
+          python3 << 'EOF'
+          import json
+          import sys
+          
+          with open('coverage.json') as f:
+              data = json.load(f)
+          
+          # Calculate coverage for bugfix_bumper/ files only
+          total_statements = 0
+          total_covered = 0
+          
+          for file_path, file_data in data['files'].items():
+              if 'bugfix_bumper/' in file_path:
+                  total_statements += file_data['summary']['num_statements']
+                  total_covered += file_data['summary']['covered_lines']
+          
+          if total_statements == 0:
+              print("No files found in bugfix_bumper/")
+              sys.exit(1)
+          
+          coverage_percent = (total_covered / total_statements) * 100
+          print(f"bugfix_bumper/ coverage: {coverage_percent:.2f}%")
+          
+          if coverage_percent < 90.0:
+              print(f"ERROR: Coverage {coverage_percent:.2f}% is below required 90%")
+              sys.exit(1)
+          else:
+              print(f"✓ Coverage {coverage_percent:.2f}% meets requirement of 90%")
+          EOF
+      
+      - name: Check tests/ coverage (80% required)
+        run: |
+          python3 << 'EOF'
+          import json
+          import sys
+          
+          with open('coverage.json') as f:
+              data = json.load(f)
+          
+          # Calculate coverage for tests/ files only
+          total_statements = 0
+          total_covered = 0
+          
+          for file_path, file_data in data['files'].items():
+              if 'tests/' in file_path:
+                  total_statements += file_data['summary']['num_statements']
+                  total_covered += file_data['summary']['covered_lines']
+          
+          if total_statements == 0:
+              print("No files found in tests/")
+              sys.exit(1)
+          
+          coverage_percent = (total_covered / total_statements) * 100
+          print(f"tests/ coverage: {coverage_percent:.2f}%")
+          
+          if coverage_percent < 80.0:
+              print(f"ERROR: Coverage {coverage_percent:.2f}% is below required 80%")
+              sys.exit(1)
+          else:
+              print(f"✓ Coverage {coverage_percent:.2f}% meets requirement of 80%")
+          EOF
+      
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v4
+        if: matrix.python-version == '3.14'
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
