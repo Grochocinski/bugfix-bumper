@@ -579,8 +579,9 @@ EXAMPLES:
     output_dir = Path(args.output_dir).resolve()
     output_file = output_dir / "patch-upgrades.json"
     summary_file = output_dir / "patch-upgrades-summary.md"
-    # Cache file should be in output_dir (bugfix-bumper) not in target repo
-    cache_file = output_dir / ".bugfix-bumper-cache.json"
+    # Cache file should always be in bugfix-bumper repo folder, not in CWD or target folder
+    bugfix_bumper_dir = Path(__file__).parent.resolve()
+    cache_file = bugfix_bumper_dir / ".bugfix-bumper-cache.json"
     
     # Validate repository root
     if not (repo_root / "package.json").exists():

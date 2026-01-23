@@ -24,7 +24,7 @@ def create_backup(package_json: Path) -> Path:
     return backup_file
 
 
-def apply_upgrades(repo_root: Path, upgrades: List[Dict], create_backups: bool = True):
+def apply_upgrades(repo_root: Path, upgrades: List[Dict], create_backups: bool = False):
     """Apply upgrades to package.json files."""
     # Group upgrades by file location
     by_location: Dict[str, List[Dict]] = {}
@@ -105,7 +105,7 @@ def main():
 EXAMPLES:
     %(prog)s patch-upgrades.json
     %(prog)s --root /path/to/repo patch-upgrades.json
-    %(prog)s --no-backup patch-upgrades.json
+    %(prog)s --backup patch-upgrades.json
         """
     )
     
@@ -119,9 +119,9 @@ EXAMPLES:
         help='Repository root directory (default: current directory)'
     )
     parser.add_argument(
-        '--no-backup',
+        '--backup',
         action='store_true',
-        help='Skip creating backups of package.json files'
+        help='Create backups of package.json files before applying changes (default: False)'
     )
     
     args = parser.parse_args()
@@ -181,7 +181,7 @@ EXAMPLES:
     print()
     
     # Apply upgrades
-    apply_upgrades(repo_root, upgrades, create_backups=not args.no_backup)
+    apply_upgrades(repo_root, upgrades, create_backups=args.backup)
 
 
 if __name__ == "__main__":

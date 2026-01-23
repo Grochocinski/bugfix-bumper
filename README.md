@@ -10,7 +10,7 @@ A tool to automatically find and apply patch version upgrades for npm packages i
 - **Two-stage workflow** - Generate a report for review, then apply approved upgrades
 - **Multi-package manager** - Supports Yarn and npm
 - **Detailed reports** - JSON and markdown summaries for easy review
-- **Automatic backups** - Creates backups before applying changes
+- **Optional backups** - Can create backups with `--backup` flag (default: False, since files are version controlled)
 - **Smart caching** - Caches package version data to reduce redundant API calls (6-hour TTL, configurable)
 
 ## Requirements
@@ -63,8 +63,8 @@ Open `patch-upgrades-summary.md` to review all suggested upgrades. You can:
 
 This will:
 - Apply all upgrades from the report
-- Create backups of modified `package.json` files
 - Show a summary of applied, skipped, and failed upgrades
+- (Use `--backup` flag to create backups of modified `package.json` files)
 
 ### Step 4: Update Lockfiles
 
@@ -105,7 +105,7 @@ Usage: bugfix-bumper-apply.py [OPTIONS] <upgrade-report.json>
 
 OPTIONS:
     -r, --root DIR              Repository root directory (default: current directory)
-    --no-backup                  Skip creating backups of package.json files
+    --backup                     Create backups of package.json files
     -h, --help                  Show this help message
 
 ARGUMENTS:
@@ -252,7 +252,7 @@ Human-readable markdown report with:
 
 - **Read-only generation**: The generate script never modifies files
 - **Version validation**: Apply script verifies current versions match before updating
-- **Automatic backups**: All modified files are backed up before changes
+- **Optional backups**: Backups can be created with `--backup` flag
 - **Patch-only upgrades**: Only suggests upgrades within the same major.minor version
 - **No pre-releases**: Filters out unstable versions
 
@@ -260,7 +260,7 @@ Human-readable markdown report with:
 
 The generate script uses a persistent cache to reduce redundant API calls:
 
-- **Cache location**: `.bugfix-bumper-cache.json` in the repository root
+- **Cache location**: `.bugfix-bumper-cache.json` in the bugfix-bumper repository folder
 - **Default TTL**: 6 hours (configurable with `--cache-ttl`)
 - **Automatic refresh**: Stale entries are refreshed on next access
 - **Cache management**:
