@@ -33,7 +33,6 @@ from bugfix_bumper.version import (
 __all__ = [
     "PackageCache",
     "add_gitignore_patterns",
-    "gitignore_patterns",
     "apply_upgrades",
     "backup_files",
     "check_package_manager",
@@ -48,6 +47,7 @@ __all__ = [
     "generate_summary",
     "get_package_versions",
     "get_range_prefix",
+    "gitignore_patterns",
     "is_git_repo",
     "process_dependency",
     "process_package_json",
