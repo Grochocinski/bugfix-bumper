@@ -292,15 +292,26 @@ def find_latest_patch(
 
 
 def find_package_json_files(repo_root: Path) -> List[Path]:
-    """Find all package.json files in the repository."""
-    files = [repo_root / "package.json"]
+    """Find all package.json files in the repository, recursively searching subdirectories."""
+    files = []
     
+    # Directories to exclude from search (skip entire subtrees)
+    excluded_dirs = {
+        'node_modules',
+        '.git',
+        'vendor',
+    }
+    
+    # First, check if root package.json exists and has workspaces
     root_package_json = repo_root / "package.json"
+    
     if root_package_json.exists():
+        files.append(root_package_json)
         try:
             with open(root_package_json, 'r') as f:
                 data = json.load(f)
             
+            # Include workspace package.json files explicitly
             workspaces = data.get("workspaces", [])
             for workspace in workspaces:
                 workspace_path = repo_root / workspace / "package.json"
@@ -309,6 +320,29 @@ def find_package_json_files(repo_root: Path) -> List[Path]:
         except (json.JSONDecodeError, KeyError):
             pass
     
+    # Use os.walk for efficient directory tree traversal with early skipping
+    repo_root_str = str(repo_root)
+    seen_files = {Path(f) for f in files}  # Track files we've already added
+    
+    for root, dirs, filenames in os.walk(repo_root_str):
+        # Skip excluded directories by removing them from dirs list
+        # This prevents os.walk from descending into them
+        dirs[:] = [d for d in dirs if d not in excluded_dirs and not d.startswith('.package-json-backups-')]
+        
+        # Check if current directory should be skipped
+        root_path = Path(root)
+        if any(part in excluded_dirs or part.startswith('.package-json-backups-') for part in root_path.parts):
+            continue
+        
+        # Check for package.json in current directory
+        if 'package.json' in filenames:
+            package_json = root_path / 'package.json'
+            if package_json not in seen_files:
+                files.append(package_json)
+                seen_files.add(package_json)
+    
+    # Sort for consistent ordering
+    files.sort()
     return files
 
 
@@ -583,10 +617,11 @@ EXAMPLES:
     bugfix_bumper_dir = Path(__file__).parent.resolve()
     cache_file = bugfix_bumper_dir / ".bugfix-bumper-cache.json"
     
-    # Validate repository root
-    if not (repo_root / "package.json").exists():
-        print(f"Error: No package.json found in {repo_root}", file=sys.stderr)
-        print("Please run this script from a directory containing a package.json file.", file=sys.stderr)
+    # Find all package.json files (validation happens here)
+    package_json_files = find_package_json_files(repo_root)
+    if not package_json_files:
+        print(f"Error: No package.json files found in {repo_root} or subdirectories", file=sys.stderr)
+        print("Please run this script from a directory containing package.json file(s).", file=sys.stderr)
         sys.exit(1)
     
     # Initialize cache
@@ -612,8 +647,7 @@ EXAMPLES:
         print("Cache: disabled for this run")
     print()
     
-    # Find all package.json files
-    package_json_files = find_package_json_files(repo_root)
+    # Use the package.json files we already found during validation
     total_files = len(package_json_files)
     
     # Process each package.json file

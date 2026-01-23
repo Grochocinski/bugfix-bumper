@@ -140,9 +140,9 @@ EXAMPLES:
             print(f"Error: Upgrades file not found: {args.upgrades_file}", file=sys.stderr)
             sys.exit(1)
     
-    # Validate repository root
-    if not (repo_root / "package.json").exists():
-        print(f"Error: No package.json found in {repo_root}", file=sys.stderr)
+    # Validate repository root exists (package.json files are validated when applying upgrades)
+    if not repo_root.exists():
+        print(f"Error: Repository root does not exist: {repo_root}", file=sys.stderr)
         print("Please specify the correct repository root with --root", file=sys.stderr)
         sys.exit(1)
     
