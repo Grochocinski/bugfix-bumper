@@ -192,3 +192,13 @@ class TestPackageCache:
         assert stats["cached_packages"] == 2
         assert stats["cache_hits"] == 2
         assert stats["cache_misses"] == 1
+
+    def test_save_use_cache_false(self, temp_dir):
+        """Save with use_cache=False (returns early, doesn't write)."""
+        cache_file = temp_dir / "cache.json"
+        cache = PackageCache(cache_file, ttl_hours=6.0, use_cache=False)
+        cache.set("yarn", "test-package", ["1.0.0"])
+        cache.save()
+
+        # File should not exist since use_cache=False
+        assert not cache_file.exists()

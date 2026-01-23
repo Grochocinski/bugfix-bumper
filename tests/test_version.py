@@ -43,6 +43,14 @@ class TestExtractMajorMinor:
     def test_complex_pre_release(self):
         assert extract_major_minor("^2.3.4-alpha.1+build.123") == "2.3"
 
+    def test_extract_major_minor_special_tags(self):
+        """Return None for special tags (latest, next, beta, alpha, rc)."""
+        assert extract_major_minor("latest") is None
+        assert extract_major_minor("next") is None
+        assert extract_major_minor("beta") is None
+        assert extract_major_minor("alpha") is None
+        assert extract_major_minor("rc") is None
+
 
 class TestExtractBaseVersion:
     """Tests for extract_base_version function."""

@@ -159,3 +159,40 @@ class TestGitignoreHandling:
             content = exclude_file.read_text()
             # Patterns should be removed
             assert "*.old" not in content or content.strip() == ""
+
+    def test_add_gitignore_patterns_oserror(self, git_repo_dir, mocker):
+        """OSError when writing to .git/info/exclude (handles gracefully)."""
+        exclude_file = git_repo_dir / ".git" / "info" / "exclude"
+        exclude_file.parent.mkdir(parents=True, exist_ok=True)
+
+        # Mock write_text to raise OSError
+        mocker.patch("pathlib.Path.write_text", side_effect=OSError("Permission denied"))
+
+        # Should handle OSError gracefully (prints warning but doesn't crash)
+        import sys
+        from io import StringIO
+        stderr = StringIO()
+        with mocker.patch("sys.stderr", stderr):
+            result = add_gitignore_patterns(git_repo_dir)
+            # Should return empty list on error
+            assert result == []
+            # Should have printed warning
+            assert "Warning" in stderr.getvalue() or "Could not update" in stderr.getvalue()
+
+    def test_remove_gitignore_patterns_oserror(self, git_repo_dir, mocker):
+        """OSError when reading/writing .git/info/exclude (handles gracefully)."""
+        exclude_file = git_repo_dir / ".git" / "info" / "exclude"
+        exclude_file.write_text("*.old\nnode_modules.old/\n")
+
+        # Mock read_text to raise OSError
+        mocker.patch("pathlib.Path.read_text", side_effect=OSError("Permission denied"))
+
+        # Should handle OSError gracefully (prints warning but doesn't crash)
+        import sys
+        from io import StringIO
+        stderr = StringIO()
+        with mocker.patch("sys.stderr", stderr):
+            # Should not raise exception
+            remove_gitignore_patterns(git_repo_dir, ["*.old", "node_modules.old/"])
+            # Should have printed warning
+            assert "Warning" in stderr.getvalue() or "Could not update" in stderr.getvalue()

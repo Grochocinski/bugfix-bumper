@@ -2,7 +2,11 @@
 
 import pytest
 
-from bugfix_bumper.package_manager import check_package_manager, detect_package_manager
+from bugfix_bumper.package_manager import (
+    check_package_manager,
+    detect_package_manager,
+    detect_package_manager_for_location,
+)
 
 
 class TestDetectPackageManager:
@@ -91,3 +95,85 @@ class TestCheckPackageManager:
         mocker.patch("builtins.print")
         with pytest.raises(SystemExit):
             check_package_manager("yarn")
+
+
+class TestDetectPackageManagerForLocation:
+    """Tests for detect_package_manager_for_location function."""
+
+    def test_detect_package_manager_for_location_yarn_lock_old(self, temp_dir):
+        """Detect from yarn.lock.old in same directory."""
+        package_json = temp_dir / "package.json"
+        package_json.write_text('{"name": "test"}')
+        yarn_lock_old = temp_dir / "yarn.lock.old"
+        yarn_lock_old.write_text("# yarn lockfile")
+
+        result = detect_package_manager_for_location(temp_dir, package_json)
+        assert result == "yarn"
+
+    def test_detect_package_manager_for_location_package_lock_old(self, temp_dir):
+        """Detect from package-lock.json.old in same directory."""
+        package_json = temp_dir / "package.json"
+        package_json.write_text('{"name": "test"}')
+        lock_old = temp_dir / "package-lock.json.old"
+        lock_old.write_text("{}")
+
+        result = detect_package_manager_for_location(temp_dir, package_json)
+        assert result == "npm"
+
+    def test_detect_package_manager_for_location_existing_yarn_lock(self, temp_dir):
+        """Detect from existing yarn.lock in same directory."""
+        package_json = temp_dir / "package.json"
+        package_json.write_text('{"name": "test"}')
+        yarn_lock = temp_dir / "yarn.lock"
+        yarn_lock.write_text("# yarn lockfile")
+
+        result = detect_package_manager_for_location(temp_dir, package_json)
+        assert result == "yarn"
+
+    def test_detect_package_manager_for_location_existing_package_lock(self, temp_dir):
+        """Detect from existing package-lock.json in same directory."""
+        package_json = temp_dir / "package.json"
+        package_json.write_text('{"name": "test"}')
+        lock_file = temp_dir / "package-lock.json"
+        lock_file.write_text("{}")
+
+        result = detect_package_manager_for_location(temp_dir, package_json)
+        assert result == "npm"
+
+    def test_detect_package_manager_for_location_parent_directories(self, temp_dir):
+        """Check parent directories up to repo root for lock files."""
+        # Create nested structure
+        nested_dir = temp_dir / "app" / "src" / "components"
+        nested_dir.mkdir(parents=True)
+        package_json = nested_dir / "package.json"
+        package_json.write_text('{"name": "test"}')
+
+        # Put yarn.lock in parent directory (app/)
+        yarn_lock = temp_dir / "app" / "yarn.lock"
+        yarn_lock.write_text("# yarn lockfile")
+
+        result = detect_package_manager_for_location(temp_dir, package_json)
+        assert result == "yarn"
+
+    def test_detect_package_manager_for_location_parent_package_lock(self, temp_dir):
+        """Check parent directories for package-lock.json."""
+        # Create nested structure
+        nested_dir = temp_dir / "app" / "src" / "components"
+        nested_dir.mkdir(parents=True)
+        package_json = nested_dir / "package.json"
+        package_json.write_text('{"name": "test"}')
+
+        # Put package-lock.json in parent directory (app/)
+        lock_file = temp_dir / "app" / "package-lock.json"
+        lock_file.write_text("{}")
+
+        result = detect_package_manager_for_location(temp_dir, package_json)
+        assert result == "npm"
+
+    def test_detect_package_manager_for_location_defaults_to_npm(self, temp_dir):
+        """Default to npm when nothing found."""
+        package_json = temp_dir / "package.json"
+        package_json.write_text('{"name": "test"}')
+
+        result = detect_package_manager_for_location(temp_dir, package_json)
+        assert result == "npm"

@@ -113,6 +113,55 @@ class TestProcessDependency:
         )
         assert result["proposed"] == "1.2.5"  # No prefix
 
+    def test_process_dependency_special_tags(self, temp_dir):
+        """Skip special tags (latest, next, beta, alpha, rc)."""
+        cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
+
+        for tag in ["latest", "next", "beta", "alpha", "rc"]:
+            result = process_dependency(
+                "test-package", tag, "dependencies", "package.json", "yarn", temp_dir, cache
+            )
+            assert result is None
+
+    def test_process_dependency_version_without_patch(self, temp_dir, mocker):
+        """Handle version without patch number (e.g., '1.2' → patch 0)."""
+        cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
+        mocker.patch("bugfix_bumper.version.find_latest_patch", return_value="1.2.5")
+        mocker.patch("bugfix_bumper.npm_yarn.get_package_versions", return_value=["1.2.0", "1.2.1", "1.2.5"])
+
+        result = process_dependency(
+            "test-package", "1.2", "dependencies", "package.json", "yarn", temp_dir, cache
+        )
+        assert result is not None
+        assert result["currentPatch"] == 0
+        assert result["proposedPatch"] == 5
+
+    def test_process_dependency_async_package_debug(self, temp_dir, mocker, capsys):
+        """Debug logging for async package when latest patch not found."""
+        cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
+        mocker.patch("bugfix_bumper.version.find_latest_patch", return_value=None)
+        mocker.patch("bugfix_bumper.npm_yarn.get_package_versions", return_value=[])
+
+        result = process_dependency(
+            "async", "1.2.3", "dependencies", "package.json", "yarn", temp_dir, cache
+        )
+        assert result is None
+
+        captured = capsys.readouterr()
+        assert "DEBUG" in captured.err
+        assert "async" in captured.err
+
+    def test_process_dependency_latest_patch_match_fails(self, temp_dir, mocker):
+        """Return None when latest_patch_match fails (invalid version format)."""
+        cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
+        # Return a version that doesn't match the expected pattern
+        mocker.patch("bugfix_bumper.version.find_latest_patch", return_value="invalid-version")
+
+        result = process_dependency(
+            "test-package", "1.2.3", "dependencies", "package.json", "yarn", temp_dir, cache
+        )
+        assert result is None
+
 
 class TestProcessPackageJson:
     """Tests for process_package_json function."""
@@ -336,3 +385,165 @@ class TestApplyUpgrades:
         result = apply_upgrades(temp_dir, [], create_backups=False)
         # Should complete without error
         assert result is None
+
+    def test_apply_upgrades_backup_failure(self, temp_dir, mocker, capsys):
+        """Exception during backup_files() (handles gracefully)."""
+        package_json = temp_dir / "package.json"
+        package_json.write_text('{"name": "test", "dependencies": {"express": "^4.18.1"}}')
+
+        upgrades = [
+            {
+                "package": "express",
+                "location": "package.json",
+                "type": "dependencies",
+                "proposed": "^4.18.3",
+            }
+        ]
+
+        # Mock backup_files to raise exception - patch where it's imported
+        mocker.patch("bugfix_bumper.processing.backup_files", side_effect=OSError("Permission denied"))
+
+        apply_upgrades(temp_dir, upgrades, create_backups=False)
+
+        captured = capsys.readouterr()
+        assert "Error" in captured.err or "backing up" in captured.err.lower() or "Skipping" in captured.err
+
+    def test_apply_upgrades_missing_backup(self, temp_dir, mocker, capsys):
+        """Backup file doesn't exist after backup (handles gracefully)."""
+        package_json = temp_dir / "package.json"
+        package_json.write_text('{"name": "test", "dependencies": {"express": "^4.18.1"}}')
+
+        upgrades = [
+            {
+                "package": "express",
+                "location": "package.json",
+                "type": "dependencies",
+                "proposed": "^4.18.3",
+            }
+        ]
+
+        # Mock backup_files to return dict with non-existent backup - patch where it's imported
+        mocker.patch(
+            "bugfix_bumper.processing.backup_files",
+            return_value={"package.json": temp_dir / "nonexistent.old"},
+        )
+
+        apply_upgrades(temp_dir, upgrades, create_backups=False)
+
+        captured = capsys.readouterr()
+        assert "Error" in captured.err or "backup" in captured.err.lower() or "Could not find" in captured.err
+
+    def test_apply_upgrades_write_failure(self, temp_dir, mocker, capsys):
+        """OSError when writing package.json (handles gracefully)."""
+        package_json = temp_dir / "package.json"
+        package_json.write_text('{"name": "test", "dependencies": {"express": "^4.18.1"}}')
+        backup_file = temp_dir / "package.json.old"
+        backup_file.write_text(package_json.read_text())
+
+        upgrades = [
+            {
+                "package": "express",
+                "location": "package.json",
+                "type": "dependencies",
+                "proposed": "^4.18.3",
+            }
+        ]
+
+        mocker.patch("bugfix_bumper.processing.backup_files", return_value={"package.json": backup_file})
+        # Mock open to fail on write (second call is for writing)
+        call_count = 0
+        original_open = open
+
+        def mock_open(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 2:  # Second call is for writing
+                raise OSError("Permission denied")
+            return original_open(*args, **kwargs)
+
+        mocker.patch("builtins.open", side_effect=mock_open)
+        mocker.patch("bugfix_bumper.processing.detect_package_manager_for_location", return_value="npm")
+        mocker.patch("bugfix_bumper.processing.regenerate_lock_file", return_value=(True, ""))
+        mocker.patch("bugfix_bumper.processing.verify_build", return_value=(True, ""))
+
+        apply_upgrades(temp_dir, upgrades, create_backups=False)
+
+        captured = capsys.readouterr()
+        assert "Error" in captured.err
+
+    def test_apply_upgrades_regen_failure(self, temp_dir, mocker, capsys):
+        """Lock file regeneration fails (handles gracefully)."""
+        package_json = temp_dir / "package.json"
+        package_json.write_text('{"name": "test", "dependencies": {"express": "^4.18.1"}}')
+        backup_file = temp_dir / "package.json.old"
+        backup_file.write_text(package_json.read_text())
+
+        upgrades = [
+            {
+                "package": "express",
+                "location": "package.json",
+                "type": "dependencies",
+                "proposed": "^4.18.3",
+            }
+        ]
+
+        mocker.patch("bugfix_bumper.processing.backup_files", return_value={"package.json": backup_file})
+        mocker.patch("bugfix_bumper.processing.detect_package_manager_for_location", return_value="npm")
+        mocker.patch("bugfix_bumper.processing.regenerate_lock_file", return_value=(False, "npm install failed"))
+
+        apply_upgrades(temp_dir, upgrades, create_backups=False)
+
+        captured = capsys.readouterr()
+        assert "Failed" in captured.err or "regenerate" in captured.err.lower() or "✗" in captured.err
+
+    def test_apply_upgrades_verify_failure(self, temp_dir, mocker, capsys):
+        """Build verification fails (handles gracefully)."""
+        package_json = temp_dir / "package.json"
+        package_json.write_text('{"name": "test", "dependencies": {"express": "^4.18.1"}}')
+        backup_file = temp_dir / "package.json.old"
+        backup_file.write_text(package_json.read_text())
+
+        upgrades = [
+            {
+                "package": "express",
+                "location": "package.json",
+                "type": "dependencies",
+                "proposed": "^4.18.3",
+            }
+        ]
+
+        mocker.patch("bugfix_bumper.processing.backup_files", return_value={"package.json": backup_file})
+        mocker.patch("bugfix_bumper.processing.detect_package_manager_for_location", return_value="npm")
+        mocker.patch("bugfix_bumper.processing.regenerate_lock_file", return_value=(True, ""))
+        mocker.patch("bugfix_bumper.processing.verify_build", return_value=(False, "npm ci failed"))
+
+        apply_upgrades(temp_dir, upgrades, create_backups=False)
+
+        captured = capsys.readouterr()
+        assert "Failed" in captured.err or "verification" in captured.err.lower() or "✗" in captured.err
+
+    def test_apply_upgrades_preserve_backups(self, temp_dir, mocker, capsys):
+        """Backup files preserved when create_backups=True."""
+        package_json = temp_dir / "package.json"
+        package_json.write_text('{"name": "test", "dependencies": {"express": "^4.18.1"}}')
+        backup_file = temp_dir / "package.json.old"
+        backup_file.write_text(package_json.read_text())
+
+        upgrades = [
+            {
+                "package": "express",
+                "location": "package.json",
+                "type": "dependencies",
+                "proposed": "^4.18.3",
+            }
+        ]
+
+        mocker.patch("bugfix_bumper.files.backup_files", return_value={"package.json": backup_file})
+        mocker.patch("bugfix_bumper.package_manager.detect_package_manager_for_location", return_value="npm")
+        mocker.patch("bugfix_bumper.npm_yarn.regenerate_lock_file", return_value=(True, ""))
+        mocker.patch("bugfix_bumper.npm_yarn.verify_build", return_value=(True, ""))
+
+        apply_upgrades(temp_dir, upgrades, create_backups=True)
+
+        captured = capsys.readouterr()
+        assert "preserved" in captured.out.lower() or "Backup files preserved" in captured.out
