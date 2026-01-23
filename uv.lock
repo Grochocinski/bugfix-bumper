@@ -32,8 +32,8 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'test'", specifier = ">=7.0.0" },
     { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=4.0.0" },
     { name = "pytest-mock", marker = "extra == 'test'", specifier = ">=3.10.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.14.0" },
-    { name = "ty", marker = "extra == 'dev'", specifier = ">=0.0.13" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = "==0.14.14" },
+    { name = "ty", marker = "extra == 'dev'", specifier = "==0.0.13" },
 ]
 provides-extras = ["test", "dev"]
 

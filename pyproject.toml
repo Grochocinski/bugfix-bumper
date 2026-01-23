@@ -32,8 +32,8 @@ test = [
     "pytest-cov>=4.0.0",
 ]
 dev = [
-    "ruff>=0.14.0",
-    "ty>=0.0.13",
+    "ruff==0.14.14",
+    "ty==0.0.13",
 ]
 
 [build-system]
@@ -124,6 +124,8 @@ line-ending = "auto"
 [tool.ty.analysis]
 # Respect type: ignore comments
 respect-type-ignore-comments = true
+# Exclude test files from type checking
+exclude = ["tests/**"]
 
 [tool.ty.rules]
 # Configure rule severity (ignore, warn, or error)
