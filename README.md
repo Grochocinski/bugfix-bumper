@@ -13,6 +13,27 @@ A tool to automatically find and apply patch version upgrades for npm packages i
 - **Optional backups** - Can create backups with `--backup` flag (default: False, since files are version controlled)
 - **Smart caching** - Caches package version data to reduce redundant API calls (6-hour TTL, configurable)
 
+## Alternatives
+
+For npm-only projects, you may want to consider **[npm-check-updates](https://www.npmjs.com/package/npm-check-updates)** (`ncu`), which provides a simpler solution for patch-only updates:
+
+```bash
+npx npm-check-updates -t patch -u
+npm install
+```
+
+**When to use npm-check-updates:**
+- Simple npm projects with a single package.json
+- You want immediate updates without a review step
+- You prefer npm ecosystem tools
+
+**When to use bugfix-bumper:**
+- You want a two-stage workflow (generate report → review → apply)
+- Working with monorepos or multiple package.json files
+- You want detailed JSON/markdown reports for review
+- You need better visibility into what will change before applying
+- Future: Support for multiple package managers (Go modules, etc.)
+
 ## Requirements
 
 - Python 3.6+ (no external dependencies required)
