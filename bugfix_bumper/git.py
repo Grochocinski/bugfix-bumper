@@ -96,9 +96,9 @@ def remove_gitignore_patterns(repo_root: Path, patterns: List[str]) -> None:
 def gitignore_patterns(repo_root: Path):
     """
     Context manager for temporarily adding gitignore patterns.
-    
+
     Adds patterns on entry and removes them on exit (even if an exception occurs).
-    
+
     Example:
         with gitignore_patterns(repo_root):
             # Do work that creates .old files
