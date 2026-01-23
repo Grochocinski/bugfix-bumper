@@ -89,7 +89,7 @@ class TestRegenerateLockFile:
         mock_run.return_value.stdout = "Success"
         mock_run.return_value.stderr = ""
 
-        success, output = regenerate_lock_file(temp_dir, "yarn")
+        success, _output = regenerate_lock_file(temp_dir, "yarn")
 
         assert success is True
         mock_run.assert_called_once()
@@ -104,7 +104,7 @@ class TestRegenerateLockFile:
         mock_run.return_value.stdout = "Success"
         mock_run.return_value.stderr = ""
 
-        success, output = regenerate_lock_file(temp_dir, "npm")
+        success, _output = regenerate_lock_file(temp_dir, "npm")
 
         assert success is True
         call_args = mock_run.call_args
@@ -151,7 +151,7 @@ class TestVerifyBuild:
         mock_run.return_value.stdout = "Success"
         mock_run.return_value.stderr = ""
 
-        success, output = verify_build(temp_dir, "yarn")
+        success, _output = verify_build(temp_dir, "yarn")
 
         assert success is True
         call_args = mock_run.call_args
@@ -164,7 +164,7 @@ class TestVerifyBuild:
         mock_run.return_value.stdout = "Success"
         mock_run.return_value.stderr = ""
 
-        success, output = verify_build(temp_dir, "npm")
+        success, _output = verify_build(temp_dir, "npm")
 
         assert success is True
         call_args = mock_run.call_args

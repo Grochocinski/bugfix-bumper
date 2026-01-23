@@ -110,7 +110,9 @@ class TestFindPackageJsonFiles:
 
         # Create a directory structure with excluded dirs in path
         (temp_dir / "node_modules" / "some-package").mkdir(parents=True)
-        (temp_dir / "node_modules" / "some-package" / "package.json").write_text('{"name": "nested"}')
+        (temp_dir / "node_modules" / "some-package" / "package.json").write_text(
+            '{"name": "nested"}'
+        )
 
         result = find_package_json_files(temp_dir)
         # Should only find root, not the one in node_modules
@@ -435,8 +437,8 @@ class TestCleanupBackups:
         mocker.patch("shutil.rmtree", side_effect=OSError("Permission denied"))
 
         # Should handle OSError gracefully (prints warning but doesn't crash)
-        import sys
         from io import StringIO
+
         stderr = StringIO()
         with mocker.patch("sys.stderr", stderr):
             cleanup_backups(backup_paths, keep_backups=False)

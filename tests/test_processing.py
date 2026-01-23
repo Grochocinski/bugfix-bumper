@@ -13,7 +13,10 @@ class TestProcessDependency:
         """Valid upgrade available (returns upgrade dict)."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
         mocker.patch("bugfix_bumper.version.find_latest_patch", return_value="1.2.5")
-        mocker.patch("bugfix_bumper.npm_yarn.get_package_versions", return_value=["1.2.0", "1.2.1", "1.2.2", "1.2.3", "1.2.5"])
+        mocker.patch(
+            "bugfix_bumper.npm_yarn.get_package_versions",
+            return_value=["1.2.0", "1.2.1", "1.2.2", "1.2.3", "1.2.5"],
+        )
 
         result = process_dependency(
             "test-package", "^1.2.3", "dependencies", "package.json", "yarn", temp_dir, cache
@@ -29,7 +32,10 @@ class TestProcessDependency:
         """No upgrade available (current is latest)."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
         mocker.patch("bugfix_bumper.version.find_latest_patch", return_value="1.2.3")
-        mocker.patch("bugfix_bumper.npm_yarn.get_package_versions", return_value=["1.2.0", "1.2.1", "1.2.2", "1.2.3"])
+        mocker.patch(
+            "bugfix_bumper.npm_yarn.get_package_versions",
+            return_value=["1.2.0", "1.2.1", "1.2.2", "1.2.3"],
+        )
 
         result = process_dependency(
             "test-package", "^1.2.3", "dependencies", "package.json", "yarn", temp_dir, cache
@@ -84,7 +90,10 @@ class TestProcessDependency:
         """Preserves range prefix (^)."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
         mocker.patch("bugfix_bumper.version.find_latest_patch", return_value="1.2.5")
-        mocker.patch("bugfix_bumper.npm_yarn.get_package_versions", return_value=["1.2.0", "1.2.1", "1.2.2", "1.2.3", "1.2.5"])
+        mocker.patch(
+            "bugfix_bumper.npm_yarn.get_package_versions",
+            return_value=["1.2.0", "1.2.1", "1.2.2", "1.2.3", "1.2.5"],
+        )
 
         result = process_dependency(
             "test-package", "^1.2.3", "dependencies", "package.json", "yarn", temp_dir, cache
@@ -95,7 +104,10 @@ class TestProcessDependency:
         """Preserves range prefix (~)."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
         mocker.patch("bugfix_bumper.version.find_latest_patch", return_value="1.2.5")
-        mocker.patch("bugfix_bumper.npm_yarn.get_package_versions", return_value=["1.2.0", "1.2.1", "1.2.2", "1.2.3", "1.2.5"])
+        mocker.patch(
+            "bugfix_bumper.npm_yarn.get_package_versions",
+            return_value=["1.2.0", "1.2.1", "1.2.2", "1.2.3", "1.2.5"],
+        )
 
         result = process_dependency(
             "test-package", "~1.2.3", "dependencies", "package.json", "yarn", temp_dir, cache
@@ -106,7 +118,10 @@ class TestProcessDependency:
         """Exact version stays exact."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
         mocker.patch("bugfix_bumper.version.find_latest_patch", return_value="1.2.5")
-        mocker.patch("bugfix_bumper.npm_yarn.get_package_versions", return_value=["1.2.0", "1.2.1", "1.2.2", "1.2.3", "1.2.5"])
+        mocker.patch(
+            "bugfix_bumper.npm_yarn.get_package_versions",
+            return_value=["1.2.0", "1.2.1", "1.2.2", "1.2.3", "1.2.5"],
+        )
 
         result = process_dependency(
             "test-package", "1.2.3", "dependencies", "package.json", "yarn", temp_dir, cache
@@ -127,7 +142,9 @@ class TestProcessDependency:
         """Handle version without patch number (e.g., '1.2' → patch 0)."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
         mocker.patch("bugfix_bumper.version.find_latest_patch", return_value="1.2.5")
-        mocker.patch("bugfix_bumper.npm_yarn.get_package_versions", return_value=["1.2.0", "1.2.1", "1.2.5"])
+        mocker.patch(
+            "bugfix_bumper.npm_yarn.get_package_versions", return_value=["1.2.0", "1.2.1", "1.2.5"]
+        )
 
         result = process_dependency(
             "test-package", "1.2", "dependencies", "package.json", "yarn", temp_dir, cache
@@ -270,10 +287,15 @@ class TestApplyUpgrades:
             }
         ]
 
-        mocker.patch("bugfix_bumper.files.backup_files", return_value={"package.json": temp_dir / "package.json.old"})
+        mocker.patch(
+            "bugfix_bumper.files.backup_files",
+            return_value={"package.json": temp_dir / "package.json.old"},
+        )
         mocker.patch("bugfix_bumper.npm_yarn.regenerate_lock_file", return_value=(True, ""))
         mocker.patch("bugfix_bumper.npm_yarn.verify_build", return_value=(True, ""))
-        mocker.patch("bugfix_bumper.package_manager.detect_package_manager_for_location", return_value="npm")
+        mocker.patch(
+            "bugfix_bumper.package_manager.detect_package_manager_for_location", return_value="npm"
+        )
 
         # Create backup file
         (temp_dir / "package.json.old").write_text(package_json.read_text())
@@ -308,10 +330,15 @@ class TestApplyUpgrades:
             },
         ]
 
-        mocker.patch("bugfix_bumper.files.backup_files", return_value={"package.json": temp_dir / "package.json.old"})
+        mocker.patch(
+            "bugfix_bumper.files.backup_files",
+            return_value={"package.json": temp_dir / "package.json.old"},
+        )
         mocker.patch("bugfix_bumper.npm_yarn.regenerate_lock_file", return_value=(True, ""))
         mocker.patch("bugfix_bumper.npm_yarn.verify_build", return_value=(True, ""))
-        mocker.patch("bugfix_bumper.package_manager.detect_package_manager_for_location", return_value="npm")
+        mocker.patch(
+            "bugfix_bumper.package_manager.detect_package_manager_for_location", return_value="npm"
+        )
 
         (temp_dir / "package.json.old").write_text(package_json.read_text())
 
@@ -368,10 +395,15 @@ class TestApplyUpgrades:
             }
         ]
 
-        mocker.patch("bugfix_bumper.files.backup_files", return_value={"package.json": temp_dir / "package.json.old"})
+        mocker.patch(
+            "bugfix_bumper.files.backup_files",
+            return_value={"package.json": temp_dir / "package.json.old"},
+        )
         mocker.patch("bugfix_bumper.npm_yarn.regenerate_lock_file", return_value=(True, ""))
         mocker.patch("bugfix_bumper.npm_yarn.verify_build", return_value=(True, ""))
-        mocker.patch("bugfix_bumper.package_manager.detect_package_manager_for_location", return_value="npm")
+        mocker.patch(
+            "bugfix_bumper.package_manager.detect_package_manager_for_location", return_value="npm"
+        )
 
         (temp_dir / "package.json.old").write_text(package_json.read_text())
 
@@ -401,12 +433,18 @@ class TestApplyUpgrades:
         ]
 
         # Mock backup_files to raise exception - patch where it's imported
-        mocker.patch("bugfix_bumper.processing.backup_files", side_effect=OSError("Permission denied"))
+        mocker.patch(
+            "bugfix_bumper.processing.backup_files", side_effect=OSError("Permission denied")
+        )
 
         apply_upgrades(temp_dir, upgrades, create_backups=False)
 
         captured = capsys.readouterr()
-        assert "Error" in captured.err or "backing up" in captured.err.lower() or "Skipping" in captured.err
+        assert (
+            "Error" in captured.err
+            or "backing up" in captured.err.lower()
+            or "Skipping" in captured.err
+        )
 
     def test_apply_upgrades_missing_backup(self, temp_dir, mocker, capsys):
         """Backup file doesn't exist after backup (handles gracefully)."""
@@ -431,7 +469,11 @@ class TestApplyUpgrades:
         apply_upgrades(temp_dir, upgrades, create_backups=False)
 
         captured = capsys.readouterr()
-        assert "Error" in captured.err or "backup" in captured.err.lower() or "Could not find" in captured.err
+        assert (
+            "Error" in captured.err
+            or "backup" in captured.err.lower()
+            or "Could not find" in captured.err
+        )
 
     def test_apply_upgrades_write_failure(self, temp_dir, mocker, capsys):
         """OSError when writing package.json (handles gracefully)."""
@@ -449,7 +491,9 @@ class TestApplyUpgrades:
             }
         ]
 
-        mocker.patch("bugfix_bumper.processing.backup_files", return_value={"package.json": backup_file})
+        mocker.patch(
+            "bugfix_bumper.processing.backup_files", return_value={"package.json": backup_file}
+        )
         # Mock open to fail on write (second call is for writing)
         call_count = 0
         original_open = open
@@ -462,7 +506,9 @@ class TestApplyUpgrades:
             return original_open(*args, **kwargs)
 
         mocker.patch("builtins.open", side_effect=mock_open)
-        mocker.patch("bugfix_bumper.processing.detect_package_manager_for_location", return_value="npm")
+        mocker.patch(
+            "bugfix_bumper.processing.detect_package_manager_for_location", return_value="npm"
+        )
         mocker.patch("bugfix_bumper.processing.regenerate_lock_file", return_value=(True, ""))
         mocker.patch("bugfix_bumper.processing.verify_build", return_value=(True, ""))
 
@@ -487,14 +533,23 @@ class TestApplyUpgrades:
             }
         ]
 
-        mocker.patch("bugfix_bumper.processing.backup_files", return_value={"package.json": backup_file})
-        mocker.patch("bugfix_bumper.processing.detect_package_manager_for_location", return_value="npm")
-        mocker.patch("bugfix_bumper.processing.regenerate_lock_file", return_value=(False, "npm install failed"))
+        mocker.patch(
+            "bugfix_bumper.processing.backup_files", return_value={"package.json": backup_file}
+        )
+        mocker.patch(
+            "bugfix_bumper.processing.detect_package_manager_for_location", return_value="npm"
+        )
+        mocker.patch(
+            "bugfix_bumper.processing.regenerate_lock_file",
+            return_value=(False, "npm install failed"),
+        )
 
         apply_upgrades(temp_dir, upgrades, create_backups=False)
 
         captured = capsys.readouterr()
-        assert "Failed" in captured.err or "regenerate" in captured.err.lower() or "✗" in captured.err
+        assert (
+            "Failed" in captured.err or "regenerate" in captured.err.lower() or "✗" in captured.err
+        )
 
     def test_apply_upgrades_verify_failure(self, temp_dir, mocker, capsys):
         """Build verification fails (handles gracefully)."""
@@ -512,15 +567,23 @@ class TestApplyUpgrades:
             }
         ]
 
-        mocker.patch("bugfix_bumper.processing.backup_files", return_value={"package.json": backup_file})
-        mocker.patch("bugfix_bumper.processing.detect_package_manager_for_location", return_value="npm")
+        mocker.patch(
+            "bugfix_bumper.processing.backup_files", return_value={"package.json": backup_file}
+        )
+        mocker.patch(
+            "bugfix_bumper.processing.detect_package_manager_for_location", return_value="npm"
+        )
         mocker.patch("bugfix_bumper.processing.regenerate_lock_file", return_value=(True, ""))
         mocker.patch("bugfix_bumper.processing.verify_build", return_value=(False, "npm ci failed"))
 
         apply_upgrades(temp_dir, upgrades, create_backups=False)
 
         captured = capsys.readouterr()
-        assert "Failed" in captured.err or "verification" in captured.err.lower() or "✗" in captured.err
+        assert (
+            "Failed" in captured.err
+            or "verification" in captured.err.lower()
+            or "✗" in captured.err
+        )
 
     def test_apply_upgrades_preserve_backups(self, temp_dir, mocker, capsys):
         """Backup files preserved when create_backups=True."""
@@ -539,7 +602,9 @@ class TestApplyUpgrades:
         ]
 
         mocker.patch("bugfix_bumper.files.backup_files", return_value={"package.json": backup_file})
-        mocker.patch("bugfix_bumper.package_manager.detect_package_manager_for_location", return_value="npm")
+        mocker.patch(
+            "bugfix_bumper.package_manager.detect_package_manager_for_location", return_value="npm"
+        )
         mocker.patch("bugfix_bumper.npm_yarn.regenerate_lock_file", return_value=(True, ""))
         mocker.patch("bugfix_bumper.npm_yarn.verify_build", return_value=(True, ""))
 

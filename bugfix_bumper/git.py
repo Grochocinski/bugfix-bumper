@@ -37,7 +37,11 @@ def add_gitignore_patterns(repo_root: Path) -> List[str]:
             existing_lines = exclude_file.read_text().splitlines()
 
         # Check which patterns already exist
-        existing_patterns = {line.strip() for line in existing_lines if line.strip() and not line.strip().startswith("#")}
+        existing_patterns = {
+            line.strip()
+            for line in existing_lines
+            if line.strip() and not line.strip().startswith("#")
+        }
         added_patterns = []
 
         # Add patterns that don't already exist

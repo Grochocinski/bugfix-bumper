@@ -124,6 +124,8 @@ line-ending = "auto"
 [tool.ty.analysis]
 # Respect type: ignore comments
 respect-type-ignore-comments = true
+
+[tool.ty.src]
 # Exclude test files from type checking
 exclude = ["tests/**"]
 

@@ -42,10 +42,15 @@ class TestMainApply:
 
         # Mock user input to confirm
         mocker.patch("builtins.input", return_value="y")
-        mocker.patch("bugfix_bumper.files.backup_files", return_value={"package.json": temp_dir / "package.json.old"})
+        mocker.patch(
+            "bugfix_bumper.files.backup_files",
+            return_value={"package.json": temp_dir / "package.json.old"},
+        )
         mocker.patch("bugfix_bumper.npm_yarn.regenerate_lock_file", return_value=(True, ""))
         mocker.patch("bugfix_bumper.npm_yarn.verify_build", return_value=(True, ""))
-        mocker.patch("bugfix_bumper.package_manager.detect_package_manager_for_location", return_value="npm")
+        mocker.patch(
+            "bugfix_bumper.package_manager.detect_package_manager_for_location", return_value="npm"
+        )
 
         # Create backup file
         (temp_dir / "package.json.old").write_text(package_json.read_text())

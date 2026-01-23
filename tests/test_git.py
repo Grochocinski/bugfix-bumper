@@ -1,6 +1,5 @@
 """Tests for bugfix_bumper.git module."""
 
-
 from bugfix_bumper.files import restore_all_backups
 from bugfix_bumper.git import (
     add_gitignore_patterns,
@@ -169,8 +168,8 @@ class TestGitignoreHandling:
         mocker.patch("pathlib.Path.write_text", side_effect=OSError("Permission denied"))
 
         # Should handle OSError gracefully (prints warning but doesn't crash)
-        import sys
         from io import StringIO
+
         stderr = StringIO()
         with mocker.patch("sys.stderr", stderr):
             result = add_gitignore_patterns(git_repo_dir)
@@ -188,8 +187,8 @@ class TestGitignoreHandling:
         mocker.patch("pathlib.Path.read_text", side_effect=OSError("Permission denied"))
 
         # Should handle OSError gracefully (prints warning but doesn't crash)
-        import sys
         from io import StringIO
+
         stderr = StringIO()
         with mocker.patch("sys.stderr", stderr):
             # Should not raise exception

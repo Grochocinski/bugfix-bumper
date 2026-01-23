@@ -1,6 +1,5 @@
 """Tests for bugfix_bumper.version module."""
 
-
 from bugfix_bumper.cache import PackageCache
 from bugfix_bumper.version import (
     extract_base_version,
