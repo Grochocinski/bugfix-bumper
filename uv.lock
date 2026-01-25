@@ -9,7 +9,6 @@ resolution-markers = [
 
 [[package]]
 name = "bugfix-bumper"
-version = "1.0.0"
 source = { editable = "." }
 
 [package.optional-dependencies]
@@ -39,7 +38,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.14.14" },
     { name = "ty", marker = "extra == 'dev'", specifier = "==0.0.13" },
 ]
-provides-extras = ["test", "dev"]
+provides-extras = ["dev", "test"]
 
 [[package]]
 name = "cfgv"

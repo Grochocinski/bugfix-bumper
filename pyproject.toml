@@ -1,7 +1,7 @@
 [project]
 name = "bugfix-bumper"
-version = "1.0.0"
-description = "A tool to automatically find and apply patch version upgrades for npm packages"
+dynamic = ["version"]
+description = "A tool to automatically find and apply patch version upgrades for npm/yarn packages and Go modules"
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
@@ -10,7 +10,7 @@ authors = [
 ]
 keywords = ["npm", "yarn", "package", "version", "upgrade", "bugfix", "patch"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
@@ -38,8 +38,12 @@ dev = [
 ]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling==1.27.0"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "VERSION"
+pattern = "^(?P<version>.*)$"
 
 [tool.ruff]
 # Target Python version

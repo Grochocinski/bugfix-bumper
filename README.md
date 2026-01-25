@@ -1,5 +1,10 @@
 # Bugfix Bumper
 
+![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)
+![CI/CD Status](https://github.com/Grochocinski/bugfix-bumper/actions/workflows/test.yml/badge.svg)
+![License](https://img.shields.io/github/license/Grochocinski/bugfix-bumper)
+![Development Status](https://img.shields.io/badge/development%20status-beta-blue)
+
 A tool to automatically find and apply patch version upgrades for npm/yarn packages and Go modules in your repository. Only upgrades patch versions (bugfix releases) within the same major.minor version, avoiding breaking changes.
 
 ## Features
@@ -16,24 +21,13 @@ A tool to automatically find and apply patch version upgrades for npm/yarn packa
 
 ## Alternatives
 
-For npm-only projects, you may want to consider **[npm-check-updates](https://www.npmjs.com/package/npm-check-updates)** (`ncu`), which provides a simpler solution for patch-only updates:
+For npm-only projects, you may want to consider **[npm-check-updates](https://www.npmjs.com/package/npm-check-updates)** (`ncu`), which provides a simpler solution for patch-only updates.
 
-```bash
-npx npm-check-updates -t patch -u
-npm install
-```
-
-**When to use npm-check-updates:**
-- Simple npm projects with a single package.json
-- You want immediate updates without a review step
-- You prefer npm ecosystem tools
-
-**When to use bugfix-bumper:**
-- You want a two-stage workflow (generate report → review → apply)
-- Working with monorepos or multiple package.json/go.mod files
-- You want detailed JSON/markdown reports for review
-- You need better visibility into what will change before applying
-- You need support for Go modules alongside npm/yarn
+**Use bugfix-bumper if you:**
+- Need support for **Go modules** (npm-check-updates only supports npm/yarn)
+- Want a two-stage workflow (generate report → review → apply)
+- Work with monorepos or multiple package.json/go.mod files
+- Prefer detailed JSON/markdown reports for review
 
 ## Requirements
 
@@ -86,24 +80,12 @@ Open `patch-upgrades-summary.md` to review all suggested upgrades. You can:
 
 This will:
 - Apply all upgrades from the report
+- **Automatically regenerate lockfiles** after applying upgrades:
+  - **Go modules**: Runs `go mod tidy` to regenerate `go.sum`
+  - **npm**: Runs `npm install` to regenerate `package-lock.json`
+  - **Yarn**: Runs `yarn install --mode=update-lockfile` to regenerate `yarn.lock`
+- Verify builds after regeneration
 - Show a summary of applied, skipped, and failed upgrades
-- (Use `--backup` flag to create backups of modified `package.json` files)
-
-### Step 4: Update Lockfiles
-
-After applying upgrades, update your lockfiles:
-
-```bash
-# For Yarn
-yarn install
-
-# For npm
-npm install
-
-# For Go modules
-# go mod tidy is automatically run during apply, but you can run it again if needed
-go mod tidy
-```
 
 ## Command-Line Options
 
@@ -239,9 +221,9 @@ cat patch-upgrades-summary.md
 5. **Safe Application**: When applying:
    - Creates backups of all modified files (package.json/go.mod and lock files/go.sum)
    - Validates current versions match before updating
-   - For Go: Uses `go mod edit` to update versions (preserves formatting and comments)
-   - For Go: Runs `go mod tidy` to update go.sum
-   - For Go: Verifies with `go mod verify`
+   - Updates dependency files with new versions
+   - **Automatically regenerates lockfiles** (go.sum, package-lock.json, yarn.lock)
+   - Verifies builds (go mod verify, npm ci, yarn install --frozen-lockfile)
    - Provides detailed feedback on success/failure
 
 ## Supported Scenarios

@@ -130,3 +130,34 @@ jobs:
         with:
           files: ./coverage.xml
           fail_ci_if_error: false
+      
+      - name: Install build tool
+        run: |
+          uv pip install build
+      
+      - name: Build wheel and source distribution
+        run: |
+          python3 -m build
+      
+      - name: Verify build artifacts
+        run: |
+          if [ ! -d "dist" ]; then
+            echo "ERROR: dist/ directory not created"
+            exit 1
+          fi
+          
+          wheel_count=$(ls -1 dist/*.whl 2>/dev/null | wc -l)
+          sdist_count=$(ls -1 dist/*.tar.gz 2>/dev/null | wc -l)
+          
+          if [ "$wheel_count" -eq 0 ]; then
+            echo "ERROR: Wheel file not found in dist/"
+            exit 1
+          fi
+          
+          if [ "$sdist_count" -eq 0 ]; then
+            echo "ERROR: Source distribution not found in dist/"
+            exit 1
+          fi
+          
+          echo "✓ Build artifacts verified:"
+          ls -lh dist/
