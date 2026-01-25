@@ -1,0 +1,31 @@
+# Pre-commit hooks configuration
+# See https://pre-commit.com for more information
+
+repos:
+  # Ruff for linting and formatting (local hook)
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff linter
+        entry: ruff check --fix
+        language: system
+        types: [python]
+        pass_filenames: true
+
+      - id: ruff-format
+        name: ruff formatter
+        entry: ruff format
+        language: system
+        types: [python]
+        pass_filenames: true
+
+  # Ty for type checking (local hook)
+  - repo: local
+    hooks:
+      - id: ty
+        name: ty type checker
+        entry: ty check
+        language: system
+        types: [python]
+        pass_filenames: false
+        always_run: true

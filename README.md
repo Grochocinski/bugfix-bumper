@@ -332,6 +332,46 @@ The generate script uses a persistent cache to reduce redundant API calls:
   - `--no-cache`: Skip cache for this run only (doesn't delete file)
 - **Benefits**: Significantly faster runs when scanning many packages, especially in monorepos
 
+## Pre-commit Hooks
+
+This project uses [pre-commit](https://pre-commit.com/) to automatically run linting and type checking before commits.
+
+### Setup
+
+```bash
+# Install pre-commit (if not already installed)
+pip install pre-commit
+# or with uv
+uv pip install pre-commit
+
+# Install the git hooks
+pre-commit install
+```
+
+### Usage
+
+Once installed, pre-commit will automatically run on every commit:
+- **Ruff**: Linting (with auto-fix) and formatting checks
+- **Ty**: Type checking
+
+**Note**: Both hooks use local installations (from your `pyproject.toml` dev dependencies), ensuring consistency with your project's tool versions.
+
+You can also run manually:
+```bash
+# Run on all files
+pre-commit run --all-files
+
+# Run on staged files only
+pre-commit run
+```
+
+### Bypassing Hooks
+
+If you need to bypass the hooks (not recommended):
+```bash
+git commit --no-verify
+```
+
 ## Testing
 
 To run tests, first install the test dependencies:
