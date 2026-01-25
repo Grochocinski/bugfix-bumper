@@ -30,7 +30,7 @@ jobs:
       
       - name: Install dependencies
         run: |
-          uv sync --extra test --extra dev
+          uv sync --group dev
       
       - name: Run pytest (all tests)
         run: |
