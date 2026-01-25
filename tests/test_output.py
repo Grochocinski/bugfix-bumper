@@ -1,8 +1,8 @@
-"""Tests for bugfix_bumper.output module."""
+"""Tests for go_patch_it.output module."""
 
 import re
 
-from bugfix_bumper.output import generate_summary
+from go_patch_it.core.output import generate_summary
 
 
 class TestGenerateSummary:

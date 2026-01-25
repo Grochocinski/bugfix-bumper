@@ -1,8 +1,8 @@
-"""Tests for bugfix_bumper.package_manager module."""
+"""Tests for go_patch_it.package_manager module."""
 
 import pytest
 
-from bugfix_bumper.package_manager import (
+from go_patch_it.core.package_manager import (
     check_package_manager,
     detect_package_manager,
     detect_package_manager_for_location,

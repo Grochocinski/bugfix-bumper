@@ -1,22 +1,11 @@
-"""Integration tests for bugfix-bumper-apply.py end-to-end flow."""
+"""Integration tests for go-patch-it apply end-to-end flow."""
 
-import importlib.util
 import json
-import sys
 from pathlib import Path
 
 import pytest
 
-# Import the script module (handles hyphenated filename)
-script_path = Path(__file__).parent.parent / "bugfix-bumper-apply.py"
-spec = importlib.util.spec_from_file_location("bugfix_bumper_apply", script_path)
-assert spec is not None, "Failed to create module spec"
-assert spec.loader is not None, "Module spec has no loader"
-bugfix_bumper_apply = importlib.util.module_from_spec(spec)
-sys.modules["bugfix_bumper_apply"] = bugfix_bumper_apply
-spec.loader.exec_module(bugfix_bumper_apply)
-
-from bugfix_bumper_apply import apply_upgrades  # type: ignore[unresolved-import]
+from go_patch_it.core.processing import apply_upgrades
 
 
 class TestMainApply:
@@ -43,7 +32,7 @@ class TestMainApply:
         # Mock user input to confirm
         mocker.patch("builtins.input", return_value="y")
         mocker.patch(
-            "bugfix_bumper.files.backup_files",
+            "go_patch_it.core.files.backup_files",
             return_value={"package.json": temp_dir / "package.json.old"},
         )
         mock_pm = mocker.Mock()
@@ -51,7 +40,7 @@ class TestMainApply:
         mock_pm.regenerate_lock.return_value = (True, "")
         mock_pm.verify_build.return_value = (True, "")
         mocker.patch(
-            "bugfix_bumper.package_manager.get_package_manager_for_location", return_value=mock_pm
+            "go_patch_it.core.package_manager.get_package_manager_for_location", return_value=mock_pm
         )
 
         # Create backup file
@@ -162,7 +151,7 @@ class TestEdgeCasesApply:
             }
         ]
 
-        mocker.patch("bugfix_bumper.files.backup_files", side_effect=OSError("Permission denied"))
+        mocker.patch("go_patch_it.core.files.backup_files", side_effect=OSError("Permission denied"))
 
         apply_upgrades(temp_dir, upgrades, create_backups=False)
         captured = capsys.readouterr()
@@ -189,18 +178,18 @@ class TestDryRun:
         )
 
         # Mock functions that should NOT be called in dry-run
-        mock_backup = mocker.patch("bugfix_bumper.files.backup_files")
+        mock_backup = mocker.patch("go_patch_it.core.files.backup_files")
         mock_pm = mocker.Mock()
         mock_pm.name = "npm"
         mock_pm.regenerate_lock = mocker.Mock()
         mock_pm.verify_build = mocker.Mock()
         mocker.patch(
-            "bugfix_bumper.package_manager.get_package_manager_for_location", return_value=mock_pm
+            "go_patch_it.core.package_manager.get_package_manager_for_location", return_value=mock_pm
         )
         mock_regen = mock_pm.regenerate_lock
         mock_verify = mock_pm.verify_build
 
-        from bugfix_bumper.processing import apply_upgrades
+        from go_patch_it.core.processing import apply_upgrades
 
         apply_upgrades(temp_dir, sample_upgrades, create_backups=False, dry_run=True)
 
@@ -241,20 +230,20 @@ class TestDryRun:
         ]
 
         # Mock functions that should NOT be called in dry-run
-        mock_backup = mocker.patch("bugfix_bumper.files.backup_files")
+        mock_backup = mocker.patch("go_patch_it.core.files.backup_files")
         mock_pm = mocker.Mock()
         mock_pm.name = "go"
         mock_pm.update_file = mocker.Mock(return_value=(True, ""))
         mock_pm.regenerate_lock = mocker.Mock(return_value=(True, ""))
         mock_pm.verify_build = mocker.Mock(return_value=(True, ""))
         mocker.patch(
-            "bugfix_bumper.package_manager.get_package_manager_for_location", return_value=mock_pm
+            "go_patch_it.core.package_manager.get_package_manager_for_location", return_value=mock_pm
         )
         mock_update = mock_pm.update_file
         mock_tidy = mock_pm.regenerate_lock
         mock_verify = mock_pm.verify_build
 
-        from bugfix_bumper.processing import apply_upgrades
+        from go_patch_it.core.processing import apply_upgrades
 
         apply_upgrades(temp_dir, upgrades, create_backups=False, dry_run=True)
 
@@ -279,21 +268,12 @@ class TestDryRun:
 
     def test_dry_run_no_user_prompt(self):
         """Verify dry-run skips confirmation prompt in main script."""
-        # This would be tested at the script level, but we can verify the flag exists
-        import importlib.util
-        import sys
-        from pathlib import Path
+        # Import the apply module and verify --dry-run is supported
+        from go_patch_it import apply
 
-        script_path = Path(__file__).parent.parent / "bugfix-bumper-apply.py"
-        spec = importlib.util.spec_from_file_location("bugfix_bumper_apply", script_path)
-        if spec and spec.loader:
-            bugfix_bumper_apply = importlib.util.module_from_spec(spec)
-            sys.modules["bugfix_bumper_apply"] = bugfix_bumper_apply
-            spec.loader.exec_module(bugfix_bumper_apply)
-
-            # Verify --dry-run argument exists in parser
-            # This is a basic check that the flag is defined
-            assert hasattr(bugfix_bumper_apply, "main")
+        # Verify main function exists in the apply module
+        # This is a basic check that the module is properly set up
+        assert hasattr(apply, "main")
 
     def test_dry_run_with_backups_flag(self, temp_dir, mocker, capsys, sample_upgrades):
         """Verify dry-run doesn't create backups even with --backup flag."""
@@ -308,9 +288,9 @@ class TestDryRun:
             )
         )
 
-        mock_backup = mocker.patch("bugfix_bumper.files.backup_files")
+        mock_backup = mocker.patch("go_patch_it.core.files.backup_files")
 
-        from bugfix_bumper.processing import apply_upgrades
+        from go_patch_it.core.processing import apply_upgrades
 
         # Even with create_backups=True, dry-run should not create backups
         apply_upgrades(temp_dir, sample_upgrades, create_backups=True, dry_run=True)

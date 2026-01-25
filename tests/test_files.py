@@ -1,15 +1,15 @@
-"""Tests for bugfix_bumper.files module."""
+"""Tests for go_patch_it.files module."""
 
 import json
 
-from bugfix_bumper.files import (
+from go_patch_it.core.files import (
     backup_files,
     cleanup_backups,
     find_backup_files,
     restore_all_backups,
     restore_files,
 )
-from bugfix_bumper.managers import GoPackageManager, NpmPackageManager
+from go_patch_it.managers import GoPackageManager, NpmPackageManager
 
 
 class TestFindPackageJsonFiles:
@@ -394,7 +394,7 @@ class TestRestoreAllBackups:
         package_json_old.write_text('{"name": "test"}')
 
         # Mock restore_files to raise an exception
-        mocker.patch("bugfix_bumper.files.restore_files", side_effect=OSError("Permission denied"))
+        mocker.patch("go_patch_it.core.files.restore_files", side_effect=OSError("Permission denied"))
 
         # Should handle exception and continue
         result = restore_all_backups(temp_dir)

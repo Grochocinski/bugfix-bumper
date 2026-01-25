@@ -1,9 +1,9 @@
-"""Tests for bugfix_bumper.cache module."""
+"""Tests for go_patch_it.cache module."""
 
 import json
 import time
 
-from bugfix_bumper.cache import PackageCache
+from go_patch_it.core.cache import PackageCache
 
 
 class TestPackageCache:

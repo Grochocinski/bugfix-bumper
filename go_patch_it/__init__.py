@@ -1,26 +1,26 @@
-"""Bugfix bumper package for managing npm package and Go module patch version upgrades."""
+"""go-patch-it package for managing Go module and npm/yarn package patch version upgrades."""
 
 from pathlib import Path
 
 # Core classes and utilities
-from bugfix_bumper.cache import PackageCache
-
-# Package manager implementations (primary API)
-from bugfix_bumper.managers import (
-    GoPackageManager,
-    NpmPackageManager,
-    PackageManager,
-    YarnPackageManager,
-)
+from go_patch_it.core.cache import PackageCache
 
 # Factory functions for getting package manager instances
-from bugfix_bumper.package_manager import (
+from go_patch_it.core.package_manager import (
     get_package_manager,
     get_package_manager_for_location,
 )
 
 # High-level processing functions
-from bugfix_bumper.processing import apply_upgrades, process_file
+from go_patch_it.core.processing import apply_upgrades, process_file
+
+# Package manager implementations (primary API)
+from go_patch_it.managers import (
+    GoPackageManager,
+    NpmPackageManager,
+    PackageManager,
+    YarnPackageManager,
+)
 
 
 # Version management

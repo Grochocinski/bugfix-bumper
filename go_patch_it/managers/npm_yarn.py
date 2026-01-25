@@ -9,9 +9,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 if TYPE_CHECKING:
-    from bugfix_bumper.cache import PackageCache
+    from go_patch_it.core.cache import PackageCache
 
-from bugfix_bumper.managers.base import PackageManager
+from go_patch_it.managers.base import PackageManager
 
 
 class NpmPackageManager(PackageManager):

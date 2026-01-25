@@ -7,11 +7,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List
 
 if TYPE_CHECKING:
-    from bugfix_bumper.cache import PackageCache
+    from go_patch_it.core.cache import PackageCache
 
-from bugfix_bumper.files import backup_files, cleanup_backups, restore_files
-from bugfix_bumper.managers import PackageManager
-from bugfix_bumper.package_manager import get_package_manager_for_location
+from go_patch_it.core.files import backup_files, cleanup_backups, restore_files
+from go_patch_it.core.package_manager import get_package_manager_for_location
+from go_patch_it.managers import PackageManager
 
 
 def process_file(
@@ -33,7 +33,7 @@ def process_file(
     file_data = package_manager.parse_file(file_path, repo_root)
 
     # Handle Go modules
-    from bugfix_bumper.managers import GoPackageManager
+    from go_patch_it.managers import GoPackageManager
 
     if isinstance(package_manager, GoPackageManager):
         # If parse_file returned None, we'll use fallback parsing, so don't return early
@@ -383,7 +383,7 @@ def apply_upgrades(
 
             if dry_run:
                 # Step 3: Detect package manager (for preview)
-                from bugfix_bumper.managers import YarnPackageManager
+                from go_patch_it.managers import YarnPackageManager
 
                 print(f"  [DRY RUN] Detected package manager: {package_manager.name}")
                 lock_file_name = (
@@ -417,7 +417,7 @@ def apply_upgrades(
                 continue
 
             # Step 3: Regenerate lock file
-            from bugfix_bumper.managers import YarnPackageManager
+            from go_patch_it.managers import YarnPackageManager
 
             lock_file_name = (
                 "yarn.lock"

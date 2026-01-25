@@ -4,8 +4,8 @@ import json
 import subprocess
 from subprocess import TimeoutExpired
 
-from bugfix_bumper.cache import PackageCache
-from bugfix_bumper.managers import NpmPackageManager, YarnPackageManager
+from go_patch_it.core.cache import PackageCache
+from go_patch_it.managers import NpmPackageManager, YarnPackageManager
 
 
 class TestNpmPackageManagerName:

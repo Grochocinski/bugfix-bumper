@@ -1,7 +1,7 @@
 """Tests for PackageManager version parsing methods."""
 
-from bugfix_bumper.cache import PackageCache
-from bugfix_bumper.managers import GoPackageManager, NpmPackageManager, YarnPackageManager
+from go_patch_it.core.cache import PackageCache
+from go_patch_it.managers import GoPackageManager, NpmPackageManager, YarnPackageManager
 
 
 class TestExtractMajorMinor:

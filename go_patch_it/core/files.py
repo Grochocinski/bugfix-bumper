@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from typing import Dict, List
 
-from bugfix_bumper.package_manager import get_package_manager_for_location
+from go_patch_it.core.package_manager import get_package_manager_for_location
 
 
 def backup_files(file_path: Path) -> Dict[str, Path]:
@@ -21,7 +21,7 @@ def backup_files(file_path: Path) -> Dict[str, Path]:
     # We need repo_root, but we don't have it here. Try to infer from file_path
     # For now, use a simple approach: detect from file name
     if file_path.name == "go.mod":
-        from bugfix_bumper.managers import GoPackageManager
+        from go_patch_it.managers import GoPackageManager
 
         pm = GoPackageManager()
     else:

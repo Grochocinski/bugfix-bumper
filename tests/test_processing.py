@@ -1,10 +1,10 @@
-"""Tests for bugfix_bumper.processing module."""
+"""Tests for go_patch_it.processing module."""
 
 import json
 
-from bugfix_bumper.cache import PackageCache
-from bugfix_bumper.managers import GoPackageManager, YarnPackageManager
-from bugfix_bumper.processing import apply_upgrades, process_file
+from go_patch_it.core.cache import PackageCache
+from go_patch_it.core.processing import apply_upgrades, process_file
+from go_patch_it.managers import GoPackageManager, YarnPackageManager
 
 
 class TestProcessDependency:
@@ -32,7 +32,7 @@ class TestProcessDependency:
         """No upgrade available (current is latest)."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
         mocker.patch(
-            "bugfix_bumper.managers.npm_yarn.YarnPackageManager.get_versions",
+            "go_patch_it.managers.npm_yarn.YarnPackageManager.get_versions",
             return_value=["1.2.0", "1.2.1", "1.2.2", "1.2.3"],
         )
 
@@ -92,7 +92,7 @@ class TestProcessDependency:
         """Preserves range prefix (^)."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
         mocker.patch(
-            "bugfix_bumper.managers.npm_yarn.YarnPackageManager.get_versions",
+            "go_patch_it.managers.npm_yarn.YarnPackageManager.get_versions",
             return_value=["1.2.0", "1.2.1", "1.2.2", "1.2.3", "1.2.5"],
         )
 
@@ -106,7 +106,7 @@ class TestProcessDependency:
         """Preserves range prefix (~)."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
         mocker.patch(
-            "bugfix_bumper.managers.npm_yarn.YarnPackageManager.get_versions",
+            "go_patch_it.managers.npm_yarn.YarnPackageManager.get_versions",
             return_value=["1.2.0", "1.2.1", "1.2.2", "1.2.3", "1.2.5"],
         )
 
@@ -144,7 +144,7 @@ class TestProcessDependency:
         """Handle version without patch number (e.g., '1.2' → patch 0)."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
         mocker.patch(
-            "bugfix_bumper.managers.npm_yarn.YarnPackageManager.get_versions",
+            "go_patch_it.managers.npm_yarn.YarnPackageManager.get_versions",
             return_value=["1.2.0", "1.2.1", "1.2.5"],
         )
 
@@ -160,7 +160,7 @@ class TestProcessDependency:
         """No upgrade when latest patch not found (no debug message for specific packages)."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
         mocker.patch(
-            "bugfix_bumper.managers.npm_yarn.YarnPackageManager.get_versions", return_value=[]
+            "go_patch_it.managers.npm_yarn.YarnPackageManager.get_versions", return_value=[]
         )
 
         pm = YarnPackageManager()
@@ -178,7 +178,7 @@ class TestProcessDependency:
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
         # Return versions that will result in invalid format after filtering
         mocker.patch(
-            "bugfix_bumper.managers.npm_yarn.YarnPackageManager.get_versions",
+            "go_patch_it.managers.npm_yarn.YarnPackageManager.get_versions",
             return_value=["invalid-version"],
         )
 
@@ -306,7 +306,7 @@ class TestApplyUpgrades:
         ]
 
         mocker.patch(
-            "bugfix_bumper.files.backup_files",
+            "go_patch_it.core.files.backup_files",
             return_value={"package.json": temp_dir / "package.json.old"},
         )
         mock_pm = mocker.Mock()
@@ -314,7 +314,7 @@ class TestApplyUpgrades:
         mock_pm.regenerate_lock.return_value = (True, "")
         mock_pm.verify_build.return_value = (True, "")
         mocker.patch(
-            "bugfix_bumper.package_manager.get_package_manager_for_location", return_value=mock_pm
+            "go_patch_it.core.package_manager.get_package_manager_for_location", return_value=mock_pm
         )
 
         # Create backup file
@@ -351,7 +351,7 @@ class TestApplyUpgrades:
         ]
 
         mocker.patch(
-            "bugfix_bumper.files.backup_files",
+            "go_patch_it.core.files.backup_files",
             return_value={"package.json": temp_dir / "package.json.old"},
         )
         mock_pm = mocker.Mock()
@@ -359,7 +359,7 @@ class TestApplyUpgrades:
         mock_pm.regenerate_lock.return_value = (True, "")
         mock_pm.verify_build.return_value = (True, "")
         mocker.patch(
-            "bugfix_bumper.package_manager.get_package_manager_for_location", return_value=mock_pm
+            "go_patch_it.core.package_manager.get_package_manager_for_location", return_value=mock_pm
         )
 
         (temp_dir / "package.json.old").write_text(package_json.read_text())
@@ -391,7 +391,7 @@ class TestProcessGoMod:
         go_mod.write_text("module test\n\ngo 1.21\n\nrequire github.com/gin-gonic/gin v1.9.1\n")
 
         # Mock GoPackageManager.parse_file to return module data
-        mock_parse = mocker.patch("bugfix_bumper.managers.go.GoPackageManager.parse_file")
+        mock_parse = mocker.patch("go_patch_it.managers.go.GoPackageManager.parse_file")
         mock_parse.return_value = {
             "modules": [
                 {"Path": "github.com/gin-gonic/gin", "Version": "v1.9.1", "Indirect": False}
@@ -399,7 +399,7 @@ class TestProcessGoMod:
         }
 
         # Mock get_versions
-        mock_get_versions = mocker.patch("bugfix_bumper.managers.go.GoPackageManager.get_versions")
+        mock_get_versions = mocker.patch("go_patch_it.managers.go.GoPackageManager.get_versions")
         mock_get_versions.return_value = ["v1.9.1", "v1.9.2"]
 
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=False)
@@ -420,7 +420,7 @@ class TestProcessGoMod:
         )
 
         # Mock parse_go_mod
-        mock_parse = mocker.patch("bugfix_bumper.managers.go.GoPackageManager.parse_file")
+        mock_parse = mocker.patch("go_patch_it.managers.go.GoPackageManager.parse_file")
         mock_parse.return_value = {
             "modules": [
                 {"Path": "github.com/gin-gonic/gin", "Version": "v1.9.1", "Indirect": False},
@@ -429,7 +429,7 @@ class TestProcessGoMod:
         }
 
         # Mock get_versions
-        mock_get_versions = mocker.patch("bugfix_bumper.managers.go.GoPackageManager.get_versions")
+        mock_get_versions = mocker.patch("go_patch_it.managers.go.GoPackageManager.get_versions")
         mock_get_versions.return_value = ["v1.9.1", "v1.9.2"]
 
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=False)
@@ -449,7 +449,7 @@ class TestProcessGoMod:
         )
 
         # Mock parse_go_mod
-        mock_parse = mocker.patch("bugfix_bumper.managers.go.GoPackageManager.parse_file")
+        mock_parse = mocker.patch("go_patch_it.managers.go.GoPackageManager.parse_file")
         mock_parse.return_value = {
             "modules": [
                 {
@@ -475,7 +475,7 @@ class TestProcessGoMod:
         )
 
         # Mock parse_go_mod
-        mock_parse = mocker.patch("bugfix_bumper.managers.go.GoPackageManager.parse_file")
+        mock_parse = mocker.patch("go_patch_it.managers.go.GoPackageManager.parse_file")
         mock_parse.return_value = {
             "modules": [
                 {
@@ -501,7 +501,7 @@ class TestProcessGoMod:
         )
 
         # Mock parse_go_mod
-        mock_parse = mocker.patch("bugfix_bumper.managers.go.GoPackageManager.parse_file")
+        mock_parse = mocker.patch("go_patch_it.managers.go.GoPackageManager.parse_file")
         mock_parse.return_value = {
             "modules": [
                 {
@@ -530,7 +530,7 @@ class TestProcessGoMod:
         )
 
         # Mock parse_go_mod
-        mock_parse = mocker.patch("bugfix_bumper.managers.go.GoPackageManager.parse_file")
+        mock_parse = mocker.patch("go_patch_it.managers.go.GoPackageManager.parse_file")
         mock_parse.return_value = {
             "modules": [
                 {
@@ -557,7 +557,7 @@ class TestProcessGoMod:
         )
 
         # Mock parse_go_mod
-        mock_parse = mocker.patch("bugfix_bumper.managers.go.GoPackageManager.parse_file")
+        mock_parse = mocker.patch("go_patch_it.managers.go.GoPackageManager.parse_file")
         mock_parse.return_value = {
             "modules": [
                 {
@@ -569,7 +569,7 @@ class TestProcessGoMod:
         }
 
         # Mock get_versions to return +incompatible versions
-        mock_get_versions = mocker.patch("bugfix_bumper.managers.go.GoPackageManager.get_versions")
+        mock_get_versions = mocker.patch("go_patch_it.managers.go.GoPackageManager.get_versions")
         mock_get_versions.return_value = [
             "v3.5.1+incompatible",
             "v3.5.2+incompatible",
@@ -593,11 +593,11 @@ class TestProcessGoMod:
         )
 
         # Mock parse_go_mod to return None (simulating failure)
-        mock_parse = mocker.patch("bugfix_bumper.managers.go.GoPackageManager.parse_file")
+        mock_parse = mocker.patch("go_patch_it.managers.go.GoPackageManager.parse_file")
         mock_parse.return_value = None
 
         # Mock get_versions
-        mock_get_versions = mocker.patch("bugfix_bumper.managers.go.GoPackageManager.get_versions")
+        mock_get_versions = mocker.patch("go_patch_it.managers.go.GoPackageManager.get_versions")
         mock_get_versions.return_value = ["v1.9.1", "v1.9.2"]
 
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=False)
@@ -614,7 +614,7 @@ class TestProcessGoMod:
         go_mod.write_text("module test\n\ngo 1.21\n")
 
         # Mock parse_go_mod to return None
-        mock_parse = mocker.patch("bugfix_bumper.managers.go.GoPackageManager.parse_file")
+        mock_parse = mocker.patch("go_patch_it.managers.go.GoPackageManager.parse_file")
         mock_parse.return_value = None
 
         # Mock open to raise OSError
@@ -635,7 +635,7 @@ class TestProcessGoMod:
         )
 
         # Mock parse_go_mod
-        mock_parse = mocker.patch("bugfix_bumper.managers.go.GoPackageManager.parse_file")
+        mock_parse = mocker.patch("go_patch_it.managers.go.GoPackageManager.parse_file")
         mock_parse.return_value = {
             "modules": [{"Path": "github.com/old/module", "Version": "v1.0.0", "Indirect": False}]
         }
@@ -653,7 +653,7 @@ class TestProcessGoMod:
         go_mod.write_text("module test\n\ngo 1.21\n")
 
         # Mock parse_go_mod to return module with no version
-        mock_parse = mocker.patch("bugfix_bumper.managers.go.GoPackageManager.parse_file")
+        mock_parse = mocker.patch("go_patch_it.managers.go.GoPackageManager.parse_file")
         mock_parse.return_value = {
             "modules": [{"Path": "github.com/test/module", "Version": "", "Indirect": False}]
         }
@@ -688,7 +688,7 @@ class TestApplyUpgradesGoMod:
 
         # Mock backup
         backup_paths = {"go.mod": temp_dir / "go.mod.old", "go.sum": temp_dir / "go.sum.old"}
-        mocker.patch("bugfix_bumper.processing.backup_files", return_value=backup_paths)
+        mocker.patch("go_patch_it.core.processing.backup_files", return_value=backup_paths)
 
         # Create backup files
         (temp_dir / "go.mod.old").write_text(go_mod.read_text())
@@ -696,13 +696,13 @@ class TestApplyUpgradesGoMod:
 
         # Mock Go commands
         mocker.patch(
-            "bugfix_bumper.managers.go.GoPackageManager.update_file", return_value=(True, "")
+            "go_patch_it.managers.go.GoPackageManager.update_file", return_value=(True, "")
         )
         mocker.patch(
-            "bugfix_bumper.managers.go.GoPackageManager.regenerate_lock", return_value=(True, "")
+            "go_patch_it.managers.go.GoPackageManager.regenerate_lock", return_value=(True, "")
         )
         mocker.patch(
-            "bugfix_bumper.managers.go.GoPackageManager.verify_build", return_value=(True, "")
+            "go_patch_it.managers.go.GoPackageManager.verify_build", return_value=(True, "")
         )
 
         apply_upgrades(temp_dir, upgrades, create_backups=False)
@@ -718,7 +718,7 @@ class TestApplyUpgradesGoMod:
         upgrades = []  # No upgrades
 
         backup_paths = {"go.mod": temp_dir / "go.mod.old"}
-        mocker.patch("bugfix_bumper.processing.backup_files", return_value=backup_paths)
+        mocker.patch("go_patch_it.core.processing.backup_files", return_value=backup_paths)
         (temp_dir / "go.mod.old").write_text(go_mod.read_text())
 
         apply_upgrades(temp_dir, upgrades, create_backups=False)
@@ -741,12 +741,12 @@ class TestApplyUpgradesGoMod:
         ]
 
         backup_paths = {"go.mod": temp_dir / "go.mod.old"}
-        mocker.patch("bugfix_bumper.processing.backup_files", return_value=backup_paths)
+        mocker.patch("go_patch_it.core.processing.backup_files", return_value=backup_paths)
         (temp_dir / "go.mod.old").write_text(go_mod.read_text())
 
         # Mock update to fail
         mocker.patch(
-            "bugfix_bumper.managers.go.GoPackageManager.update_file",
+            "go_patch_it.managers.go.GoPackageManager.update_file",
             return_value=(False, "error: invalid module"),
         )
 
@@ -770,15 +770,15 @@ class TestApplyUpgradesGoMod:
         ]
 
         backup_paths = {"go.mod": temp_dir / "go.mod.old"}
-        mocker.patch("bugfix_bumper.processing.backup_files", return_value=backup_paths)
+        mocker.patch("go_patch_it.core.processing.backup_files", return_value=backup_paths)
         (temp_dir / "go.mod.old").write_text(go_mod.read_text())
 
         # Mock update to succeed, tidy to fail
         mocker.patch(
-            "bugfix_bumper.managers.go.GoPackageManager.update_file", return_value=(True, "")
+            "go_patch_it.managers.go.GoPackageManager.update_file", return_value=(True, "")
         )
         mocker.patch(
-            "bugfix_bumper.managers.go.GoPackageManager.regenerate_lock",
+            "go_patch_it.managers.go.GoPackageManager.regenerate_lock",
             return_value=(False, "error: cannot find module"),
         )
 
@@ -802,18 +802,18 @@ class TestApplyUpgradesGoMod:
         ]
 
         backup_paths = {"go.mod": temp_dir / "go.mod.old"}
-        mocker.patch("bugfix_bumper.processing.backup_files", return_value=backup_paths)
+        mocker.patch("go_patch_it.core.processing.backup_files", return_value=backup_paths)
         (temp_dir / "go.mod.old").write_text(go_mod.read_text())
 
         # Mock update and tidy to succeed, verify to fail
         mocker.patch(
-            "bugfix_bumper.managers.go.GoPackageManager.update_file", return_value=(True, "")
+            "go_patch_it.managers.go.GoPackageManager.update_file", return_value=(True, "")
         )
         mocker.patch(
-            "bugfix_bumper.managers.go.GoPackageManager.regenerate_lock", return_value=(True, "")
+            "go_patch_it.managers.go.GoPackageManager.regenerate_lock", return_value=(True, "")
         )
         mocker.patch(
-            "bugfix_bumper.managers.go.GoPackageManager.verify_build",
+            "go_patch_it.managers.go.GoPackageManager.verify_build",
             return_value=(False, "error: checksum mismatch"),
         )
 
@@ -869,7 +869,7 @@ class TestApplyUpgradesGoMod:
         ]
 
         mocker.patch(
-            "bugfix_bumper.files.backup_files",
+            "go_patch_it.core.files.backup_files",
             return_value={"package.json": temp_dir / "package.json.old"},
         )
         mock_pm = mocker.Mock()
@@ -877,7 +877,7 @@ class TestApplyUpgradesGoMod:
         mock_pm.regenerate_lock.return_value = (True, "")
         mock_pm.verify_build.return_value = (True, "")
         mocker.patch(
-            "bugfix_bumper.package_manager.get_package_manager_for_location", return_value=mock_pm
+            "go_patch_it.core.package_manager.get_package_manager_for_location", return_value=mock_pm
         )
 
         (temp_dir / "package.json.old").write_text(package_json.read_text())
@@ -909,7 +909,7 @@ class TestApplyUpgradesGoMod:
 
         # Mock backup_files to raise exception - patch where it's imported
         mocker.patch(
-            "bugfix_bumper.processing.backup_files", side_effect=OSError("Permission denied")
+            "go_patch_it.core.processing.backup_files", side_effect=OSError("Permission denied")
         )
 
         apply_upgrades(temp_dir, upgrades, create_backups=False)
@@ -937,7 +937,7 @@ class TestApplyUpgradesGoMod:
 
         # Mock backup_files to return dict with non-existent backup - patch where it's imported
         mocker.patch(
-            "bugfix_bumper.processing.backup_files",
+            "go_patch_it.core.processing.backup_files",
             return_value={"package.json": temp_dir / "nonexistent.old"},
         )
 
@@ -967,7 +967,7 @@ class TestApplyUpgradesGoMod:
         ]
 
         mocker.patch(
-            "bugfix_bumper.processing.backup_files", return_value={"package.json": backup_file}
+            "go_patch_it.core.processing.backup_files", return_value={"package.json": backup_file}
         )
         # Mock open to fail on write (second call is for writing)
         call_count = 0
@@ -986,7 +986,7 @@ class TestApplyUpgradesGoMod:
         mock_pm.regenerate_lock.return_value = (True, "")
         mock_pm.verify_build.return_value = (True, "")
         mocker.patch(
-            "bugfix_bumper.package_manager.get_package_manager_for_location",
+            "go_patch_it.core.package_manager.get_package_manager_for_location",
             return_value=mock_pm,
         )
 
@@ -1012,14 +1012,14 @@ class TestApplyUpgradesGoMod:
         ]
 
         mocker.patch(
-            "bugfix_bumper.processing.backup_files", return_value={"package.json": backup_file}
+            "go_patch_it.core.processing.backup_files", return_value={"package.json": backup_file}
         )
         mock_pm = mocker.Mock()
         mock_pm.name = "npm"
         mock_pm.regenerate_lock.return_value = (False, "npm install failed")
         mock_pm.verify_build.return_value = (True, "")
         mocker.patch(
-            "bugfix_bumper.processing.get_package_manager_for_location",
+            "go_patch_it.core.processing.get_package_manager_for_location",
             return_value=mock_pm,
         )
 
@@ -1047,14 +1047,14 @@ class TestApplyUpgradesGoMod:
         ]
 
         mocker.patch(
-            "bugfix_bumper.processing.backup_files", return_value={"package.json": backup_file}
+            "go_patch_it.core.processing.backup_files", return_value={"package.json": backup_file}
         )
         mock_pm = mocker.Mock()
         mock_pm.name = "npm"
         mock_pm.regenerate_lock.return_value = (True, "")
         mock_pm.verify_build.return_value = (False, "npm ci failed")
         mocker.patch(
-            "bugfix_bumper.processing.get_package_manager_for_location",
+            "go_patch_it.core.processing.get_package_manager_for_location",
             return_value=mock_pm,
         )
 
@@ -1083,16 +1083,16 @@ class TestApplyUpgradesGoMod:
             }
         ]
 
-        mocker.patch("bugfix_bumper.files.backup_files", return_value={"package.json": backup_file})
+        mocker.patch("go_patch_it.core.files.backup_files", return_value={"package.json": backup_file})
         mocker.patch(
-            "bugfix_bumper.package_manager.detect_package_manager_for_location", return_value="npm"
+            "go_patch_it.core.package_manager.detect_package_manager_for_location", return_value="npm"
         )
         mock_pm = mocker.Mock()
         mock_pm.name = "npm"
         mock_pm.regenerate_lock.return_value = (True, "")
         mock_pm.verify_build.return_value = (True, "")
         mocker.patch(
-            "bugfix_bumper.processing.get_package_manager_for_location", return_value=mock_pm
+            "go_patch_it.core.processing.get_package_manager_for_location", return_value=mock_pm
         )
 
         apply_upgrades(temp_dir, upgrades, create_backups=True)
@@ -1142,13 +1142,13 @@ class TestApplyUpgradesDryRun:
         ]
 
         # Mock functions that should NOT be called in dry-run
-        mock_backup = mocker.patch("bugfix_bumper.files.backup_files")
+        mock_backup = mocker.patch("go_patch_it.core.files.backup_files")
         mock_pm = mocker.Mock()
         mock_pm.name = "npm"
         mock_pm.regenerate_lock = mocker.Mock()
         mock_pm.verify_build = mocker.Mock()
         mocker.patch(
-            "bugfix_bumper.package_manager.get_package_manager_for_location", return_value=mock_pm
+            "go_patch_it.core.package_manager.get_package_manager_for_location", return_value=mock_pm
         )
 
         # Call with dry_run=True

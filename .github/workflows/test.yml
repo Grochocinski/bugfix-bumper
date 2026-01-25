@@ -38,10 +38,10 @@ jobs:
       
       - name: Run pytest with coverage
         run: |
-          uv run pytest --cov=bugfix_bumper --cov=tests --cov-report=term --cov-report=json --cov-report=xml -q
+          uv run pytest --cov=go_patch_it --cov=tests --cov-report=term --cov-report=json --cov-report=xml -q
         continue-on-error: false
       
-      - name: Check bugfix_bumper/ coverage (90% overall, 80% per-file)
+      - name: Check go_patch_it/ coverage (90% overall, 80% per-file)
         run: |
           python3 << 'EOF'
           import json
@@ -50,13 +50,13 @@ jobs:
           with open('coverage.json') as f:
               data = json.load(f)
           
-          # Calculate coverage for bugfix_bumper/ files only
+          # Calculate coverage for go_patch_it/ files only
           total_statements = 0
           total_covered = 0
           files_below_threshold = []
           
           for file_path, file_data in data['files'].items():
-              if 'bugfix_bumper/' in file_path:
+              if 'go_patch_it/' in file_path:
                   statements = file_data['summary']['num_statements']
                   covered = file_data['summary']['covered_lines']
                   total_statements += statements
@@ -69,11 +69,11 @@ jobs:
                           files_below_threshold.append((file_path, file_coverage, covered, statements))
           
           if total_statements == 0:
-              print("No files found in bugfix_bumper/")
+              print("No files found in go_patch_it/")
               sys.exit(1)
           
           coverage_percent = (total_covered / total_statements) * 100
-          print(f"bugfix_bumper/ overall coverage: {coverage_percent:.2f}%")
+          print(f"go_patch_it/ overall coverage: {coverage_percent:.2f}%")
           
           # Check overall coverage (90% required)
           if coverage_percent < 90.0:

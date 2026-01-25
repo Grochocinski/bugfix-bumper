@@ -1,8 +1,8 @@
-# Bugfix Bumper
+# go-patch-it
 
 ![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)
-![CI/CD Status](https://github.com/Grochocinski/bugfix-bumper/actions/workflows/test.yml/badge.svg)
-![License](https://img.shields.io/github/license/Grochocinski/bugfix-bumper)
+![CI/CD Status](https://github.com/Grochocinski/go-patch-it/actions/workflows/test.yml/badge.svg)
+![License](https://img.shields.io/github/license/Grochocinski/go-patch-it)
 ![Development Status](https://img.shields.io/badge/development%20status-beta-blue)
 
 A tool to automatically find and apply patch version upgrades for npm/yarn packages and Go modules in your repository. Only upgrades patch versions (bugfix releases) within the same major.minor version, avoiding breaking changes.
@@ -23,7 +23,7 @@ A tool to automatically find and apply patch version upgrades for npm/yarn packa
 
 For npm-only projects, you may want to consider **[npm-check-updates](https://www.npmjs.com/package/npm-check-updates)** (`ncu`), which provides a simpler solution for patch-only updates.
 
-**Use bugfix-bumper if you:**
+**Use go-patch-it if you:**
 - Need support for **Go modules** (npm-check-updates only supports npm/yarn)
 - Want a two-stage workflow (generate report → review → apply)
 - Work with monorepos or multiple package.json/go.mod files
@@ -37,16 +37,39 @@ For npm-only projects, you may want to consider **[npm-check-updates](https://ww
 
 ## Installation
 
-Simply copy the scripts to your repository or a directory in your PATH:
+### From PyPI (Recommended)
 
 ```bash
-# Clone or download this repository
-git clone <repository-url> bugfix-bumper
-cd bugfix-bumper
+pip install go-patch-it
+```
 
-# Or copy the scripts to your project
-cp bugfix-bumper-*.py /path/to/your/project/
-chmod +x bugfix-bumper-*.py
+Then run using:
+```bash
+go-patch-it                    # Runs both generate and apply
+go-patch-it --generate         # Generate report only
+go-patch-it --apply            # Apply upgrades only
+go-patch-it --version          # Print version
+```
+
+Or use `uvx` for one-off runs without installing:
+```bash
+uvx go-patch-it
+```
+
+### From GitHub Releases
+
+Download the wheel file from the [Releases page](https://github.com/Grochocinski/go-patch-it/releases) and install:
+
+```bash
+pip install go_patch_it-0.1.0-py3-none-any.whl
+```
+
+### From Source
+
+```bash
+git clone https://github.com/Grochocinski/go-patch-it.git
+cd go-patch-it
+pip install .
 ```
 
 ## Quick Start
@@ -54,7 +77,7 @@ chmod +x bugfix-bumper-*.py
 ### Step 1: Generate Upgrade Report
 
 ```bash
-./bugfix-bumper-generate.py
+./go-patch-it-generate.py
 ```
 
 This will:
@@ -75,7 +98,7 @@ Open `patch-upgrades-summary.md` to review all suggested upgrades. You can:
 ### Step 3: Apply Upgrades
 
 ```bash
-./bugfix-bumper-apply.py patch-upgrades.json
+./go-patch-it-apply.py patch-upgrades.json
 ```
 
 This will:
@@ -89,10 +112,10 @@ This will:
 
 ## Command-Line Options
 
-### `bugfix-bumper-generate.py`
+### `go-patch-it-generate.py`
 
 ```
-Usage: bugfix-bumper-generate.py [OPTIONS]
+Usage: go-patch-it-generate.py [OPTIONS]
 
 OPTIONS:
     -r, --root DIR              Repository root directory (default: current directory)
@@ -107,10 +130,10 @@ OPTIONS:
     -h, --help                  Show this help message
 ```
 
-### `bugfix-bumper-apply.py`
+### `go-patch-it-apply.py`
 
 ```
-Usage: bugfix-bumper-apply.py [OPTIONS] <upgrade-report.json>
+Usage: go-patch-it-apply.py [OPTIONS] <upgrade-report.json>
 
 OPTIONS:
     -r, --root DIR              Repository root directory (default: current directory)
@@ -128,70 +151,70 @@ ARGUMENTS:
 
 ```bash
 # Generate report in current directory
-./bugfix-bumper-generate.py
+./go-patch-it-generate.py
 
 # Review the generated files
 cat patch-upgrades-summary.md
 
 # Apply the upgrades
-./bugfix-bumper-apply.py patch-upgrades.json
+./go-patch-it-apply.py patch-upgrades.json
 ```
 
 ### Custom Output Directory
 
 ```bash
 # Generate reports in a specific directory
-./bugfix-bumper-generate.py --output-dir ./reports
+./go-patch-it-generate.py --output-dir ./reports
 
 # Apply from that directory
-./bugfix-bumper-apply.py ./reports/patch-upgrades.json
+./go-patch-it-apply.py ./reports/patch-upgrades.json
 ```
 
 ### Different Repository Root
 
 ```bash
 # Scan a different repository
-./bugfix-bumper-generate.py --root /path/to/other/repo
+./go-patch-it-generate.py --root /path/to/other/repo
 
 # Apply upgrades to that repository
-./bugfix-bumper-apply.py --root /path/to/other/repo patch-upgrades.json
+./go-patch-it-apply.py --root /path/to/other/repo patch-upgrades.json
 ```
 
 ### Force Package Manager
 
 ```bash
 # Force npm even if yarn.lock exists
-./bugfix-bumper-generate.py --package-manager npm
+./go-patch-it-generate.py --package-manager npm
 ```
 
 ### Exclude Dependency Types
 
 ```bash
 # Only check dependencies (skip devDependencies)
-./bugfix-bumper-generate.py --no-dev
+./go-patch-it-generate.py --no-dev
 
 # Only check devDependencies (skip dependencies)
-./bugfix-bumper-generate.py --no-prod
+./go-patch-it-generate.py --no-prod
 ```
 
 ### Dry Run (Preview Changes)
 
 ```bash
 # Preview what would be changed without applying
-./bugfix-bumper-apply.py --dry-run patch-upgrades.json
+./go-patch-it-apply.py --dry-run patch-upgrades.json
 ```
 
 ### Cache Management
 
 ```bash
 # Clear cache and force fresh fetch
-./bugfix-bumper-generate.py --clear-cache
+./go-patch-it-generate.py --clear-cache
 
 # Skip cache for this run (doesn't delete cache file)
-./bugfix-bumper-generate.py --no-cache
+./go-patch-it-generate.py --no-cache
 
 # Custom cache TTL (12 hours)
-./bugfix-bumper-generate.py --cache-ttl 12
+./go-patch-it-generate.py --cache-ttl 12
 ```
 
 ## How It Works
@@ -306,7 +329,7 @@ Human-readable markdown report with:
 
 The generate script uses a persistent cache to reduce redundant API calls:
 
-- **Cache location**: `.bugfix-bumper-cache.json` in the bugfix-bumper repository folder
+- **Cache location**: `.go-patch-it-cache.json` in the go-patch-it repository folder
 - **Default TTL**: 6 hours (configurable with `--cache-ttl`)
 - **Automatic refresh**: Stale entries are refreshed on next access
 - **Cache management**:

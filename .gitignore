@@ -6,7 +6,7 @@ patch-upgrades-summary.md
 .package-json-backups-*/
 
 # npm/yarn package manager cache file
-.bugfix-bumper-cache.json
+.go-patch-it-cache.json
 
 # DS store
 .DS_Store

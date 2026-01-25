@@ -1,14 +1,14 @@
 [project]
-name = "bugfix-bumper"
+name = "go-patch-it"
 dynamic = ["version"]
-description = "A tool to automatically find and apply patch version upgrades for npm/yarn packages and Go modules"
+description = "A tool to automatically find and apply patch version upgrades for Go modules and npm/yarn packages"
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
     {name = "William Grochocinski"}
 ]
-keywords = ["npm", "yarn", "package", "version", "upgrade", "bugfix", "patch"]
+keywords = ["go", "golang", "modules", "npm", "yarn", "package", "version", "upgrade", "patch"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -36,6 +36,9 @@ dev = [
     "ty==0.0.13",
     "pre-commit>=3.0.0",
 ]
+
+[project.scripts]
+go-patch-it = "go_patch_it.cli:main"
 
 [build-system]
 requires = ["hatchling==1.27.0"]
@@ -100,7 +103,7 @@ unfixable = []
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 
 [tool.ruff.lint.isort]
-known-first-party = ["bugfix_bumper"]
+known-first-party = ["go_patch_it"]
 
 [tool.ruff.lint.per-file-ignores]
 # Allow print statements in scripts
@@ -151,4 +154,9 @@ addopts = [
     "--cov=.",
     "--cov-report=term-missing",
     "--cov-report=html",
+]
+
+[dependency-groups]
+dev = [
+    "build==1.2.2.post1",
 ]

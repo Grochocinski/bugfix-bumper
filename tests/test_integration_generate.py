@@ -1,22 +1,10 @@
-"""Integration tests for bugfix-bumper-generate.py end-to-end flow."""
+"""Integration tests for go-patch-it generate end-to-end flow."""
 
 import contextlib
-import importlib.util
 import json
-import sys
-from pathlib import Path
 
-# Import the script module (handles hyphenated filename)
-script_path = Path(__file__).parent.parent / "bugfix-bumper-generate.py"
-spec = importlib.util.spec_from_file_location("bugfix_bumper_generate", script_path)
-assert spec is not None, "Failed to create module spec"
-assert spec.loader is not None, "Module spec has no loader"
-bugfix_bumper_generate = importlib.util.module_from_spec(spec)
-sys.modules["bugfix_bumper_generate"] = bugfix_bumper_generate
-spec.loader.exec_module(bugfix_bumper_generate)
-
-from bugfix_bumper.managers import NpmPackageManager
-from bugfix_bumper.package_manager import detect_package_manager
+from go_patch_it.core.package_manager import detect_package_manager
+from go_patch_it.managers import NpmPackageManager
 
 
 class TestMainGenerate:
@@ -58,7 +46,7 @@ class TestEdgeCases:
 
     def test_version_parsing_single_digit(self):
         """Single digit versions."""
-        from bugfix_bumper.managers import NpmPackageManager
+        from go_patch_it.managers import NpmPackageManager
 
         pm = NpmPackageManager()
         assert pm.extract_major_minor("1") == "1.0"
@@ -66,7 +54,7 @@ class TestEdgeCases:
 
     def test_version_parsing_very_long_version_string(self):
         """Very long version strings."""
-        from bugfix_bumper.managers import NpmPackageManager
+        from go_patch_it.managers import NpmPackageManager
 
         pm = NpmPackageManager()
         long_version = "^1.2.3.4.5.6.7.8.9.10"
@@ -75,8 +63,8 @@ class TestEdgeCases:
 
     def test_special_characters_in_package_names(self, temp_dir, mocker):
         """Special characters in package names."""
-        from bugfix_bumper.cache import PackageCache
-        from bugfix_bumper.managers import YarnPackageManager
+        from go_patch_it.core.cache import PackageCache
+        from go_patch_it.managers import YarnPackageManager
 
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
         pm = YarnPackageManager()
@@ -91,8 +79,8 @@ class TestEdgeCases:
 
     def test_unicode_in_package_names(self, temp_dir):
         """Unicode in package names."""
-        from bugfix_bumper.cache import PackageCache
-        from bugfix_bumper.managers import YarnPackageManager
+        from go_patch_it.core.cache import PackageCache
+        from go_patch_it.managers import YarnPackageManager
 
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
         pm = YarnPackageManager()
@@ -105,7 +93,7 @@ class TestEdgeCases:
 
     def test_file_system_permissions_error(self, temp_dir, mocker):
         """Permissions errors (simulated)."""
-        from bugfix_bumper.cache import PackageCache
+        from go_patch_it.core.cache import PackageCache
 
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
         # Mock IOError for permissions

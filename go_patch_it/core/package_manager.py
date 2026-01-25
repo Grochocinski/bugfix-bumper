@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from bugfix_bumper.managers import (
+from go_patch_it.managers import (
     GoPackageManager,
     NpmPackageManager,
     PackageManager,

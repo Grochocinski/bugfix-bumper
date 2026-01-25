@@ -1,13 +1,13 @@
-"""Tests for bugfix_bumper.git module."""
+"""Tests for go_patch_it.git module."""
 
-from bugfix_bumper.files import restore_all_backups
-from bugfix_bumper.git import (
+from go_patch_it.core.files import restore_all_backups
+from go_patch_it.core.git import (
     add_gitignore_patterns,
     gitignore_patterns,
     is_git_repo,
     remove_gitignore_patterns,
 )
-from bugfix_bumper.processing import apply_upgrades
+from go_patch_it.core.processing import apply_upgrades
 
 
 class TestGitignoreHandling:
