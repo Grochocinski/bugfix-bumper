@@ -94,7 +94,99 @@ class TestRegenerateLockFile:
         assert success is True
         mock_run.assert_called_once()
         call_args = mock_run.call_args
-        assert call_args[0][0] == ["yarn", "install"]
+        assert call_args[0][0] == ["yarn", "install", "--mode=update-lockfile"]
+        assert call_args[1]["cwd"] == str(temp_dir)
+
+    def test_regenerate_lock_file_yarn_workspace(self, temp_dir, mocker):
+        """Test yarn install for workspace package (runs from repo root)."""
+
+        # Create root package.json with workspaces
+        root_package_json = temp_dir / "package.json"
+        root_package_json.write_text('{"workspaces": ["packages/*"]}')
+
+        # Create workspace package
+        workspace_dir = temp_dir / "packages" / "pkg1"
+        workspace_dir.mkdir(parents=True)
+        workspace_package_json = workspace_dir / "package.json"
+        workspace_package_json.write_text('{"name": "pkg1"}')
+
+        mock_run = mocker.patch("subprocess.run")
+        mock_run.return_value.returncode = 0
+        mock_run.return_value.stdout = "Success"
+        mock_run.return_value.stderr = ""
+
+        success, _output = regenerate_lock_file(workspace_dir, "yarn", repo_root=temp_dir)
+
+        assert success is True
+        mock_run.assert_called_once()
+        call_args = mock_run.call_args
+        assert call_args[0][0] == ["yarn", "install", "--mode=update-lockfile"]
+        # Should run from repo root, not workspace directory
+        assert call_args[1]["cwd"] == str(temp_dir)
+
+    def test_regenerate_lock_file_yarn_workspace_invalid_json(self, temp_dir, mocker):
+        """Test yarn install when root package.json has invalid JSON."""
+        # Create root package.json with invalid JSON
+        root_package_json = temp_dir / "package.json"
+        root_package_json.write_text("invalid json{")
+
+        # Create workspace package
+        workspace_dir = temp_dir / "packages" / "pkg1"
+        workspace_dir.mkdir(parents=True)
+        workspace_package_json = workspace_dir / "package.json"
+        workspace_package_json.write_text('{"name": "pkg1"}')
+
+        mock_run = mocker.patch("subprocess.run")
+        mock_run.return_value.returncode = 0
+        mock_run.return_value.stdout = "Success"
+        mock_run.return_value.stderr = ""
+
+        success, _output = regenerate_lock_file(workspace_dir, "yarn", repo_root=temp_dir)
+
+        assert success is True
+        # Should run from workspace directory since JSON parsing failed
+        call_args = mock_run.call_args
+        assert call_args[1]["cwd"] == str(workspace_dir)
+
+    def test_regenerate_lock_file_yarn_workspace_no_workspaces_key(self, temp_dir, mocker):
+        """Test yarn install when root package.json has no workspaces key."""
+        # Create root package.json without workspaces
+        root_package_json = temp_dir / "package.json"
+        root_package_json.write_text('{"name": "root"}')
+
+        # Create workspace package
+        workspace_dir = temp_dir / "packages" / "pkg1"
+        workspace_dir.mkdir(parents=True)
+        workspace_package_json = workspace_dir / "package.json"
+        workspace_package_json.write_text('{"name": "pkg1"}')
+
+        mock_run = mocker.patch("subprocess.run")
+        mock_run.return_value.returncode = 0
+        mock_run.return_value.stdout = "Success"
+        mock_run.return_value.stderr = ""
+
+        success, _output = regenerate_lock_file(workspace_dir, "yarn", repo_root=temp_dir)
+
+        assert success is True
+        # Should run from workspace directory since no workspaces key
+        call_args = mock_run.call_args
+        assert call_args[1]["cwd"] == str(workspace_dir)
+
+    def test_regenerate_lock_file_yarn_workspace_root_package(self, temp_dir, mocker):
+        """Test yarn install when package.json is the root (not a workspace package)."""
+        root_package_json = temp_dir / "package.json"
+        root_package_json.write_text('{"workspaces": ["packages/*"]}')
+
+        mock_run = mocker.patch("subprocess.run")
+        mock_run.return_value.returncode = 0
+        mock_run.return_value.stdout = "Success"
+        mock_run.return_value.stderr = ""
+
+        success, _output = regenerate_lock_file(temp_dir, "yarn", repo_root=temp_dir)
+
+        assert success is True
+        # Should run from temp_dir since it's the root package
+        call_args = mock_run.call_args
         assert call_args[1]["cwd"] == str(temp_dir)
 
     def test_regenerate_lock_file_npm(self, temp_dir, mocker):

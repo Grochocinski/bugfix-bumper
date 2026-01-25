@@ -7,7 +7,7 @@ from typing import Optional
 
 
 def detect_package_manager(repo_root: Path, forced: Optional[str] = None) -> str:
-    """Detect package manager from lockfiles."""
+    """Detect package manager from lockfiles or go.mod files."""
     if forced:
         return forced
 
@@ -15,17 +15,43 @@ def detect_package_manager(repo_root: Path, forced: Optional[str] = None) -> str
         return "yarn"
     if (repo_root / "package-lock.json").exists():
         return "npm"
+    if (repo_root / "go.mod").exists():
+        return "go"
     return "unknown"
 
 
 def detect_package_manager_for_location(repo_root: Path, package_json: Path) -> str:
     """
-    Detect package manager for a specific package.json location.
-    Checks for yarn.lock or package-lock.json in same directory or parent directories.
+    Detect package manager for a specific package.json or go.mod location.
+    Checks for yarn.lock, package-lock.json, or go.mod in same directory or parent directories.
     For workspace packages, prefers the root's package manager.
-    Returns 'npm', 'yarn', or 'unknown'.
+    Returns 'npm', 'yarn', 'go', or 'unknown'.
     """
     package_dir = package_json.parent
+    is_go_mod = package_json.name == "go.mod"
+
+    # For go.mod files, check for go.mod in same directory or parent
+    if is_go_mod:
+        # Check in go.mod directory first
+        if (package_dir / "go.mod").exists():
+            return "go"
+
+        # Check parent directories up to and including repo root
+        current = package_dir
+        while current != repo_root.parent:
+            if (current / "go.mod").exists():
+                return "go"
+            if current == repo_root:
+                break
+            current = current.parent
+
+        # Check repo root for go.mod
+        if (repo_root / "go.mod").exists():
+            return "go"
+
+        return "unknown"
+
+    # For package.json files, use existing logic
     root_package_json = repo_root / "package.json"
     is_workspace_package = package_json != root_package_json
 
@@ -33,6 +59,7 @@ def detect_package_manager_for_location(repo_root: Path, package_json: Path) -> 
     if is_workspace_package and root_package_json.exists():
         try:
             import json
+
             with open(root_package_json) as f:
                 root_data = json.load(f)
             # If root has workspaces, check root lock files to determine package manager
@@ -68,7 +95,7 @@ def detect_package_manager_for_location(repo_root: Path, package_json: Path) -> 
         return "yarn"
     if (package_dir / "package-lock.json").exists():
         return "npm"
-    
+
     # Check backup files as fallback
     if (package_dir / "yarn.lock.old").exists():
         return "yarn"
@@ -99,7 +126,7 @@ def check_package_manager(pm: str):
     if pm == "unknown":
         print("Error: Could not detect package manager.", file=sys.stderr)
         print(
-            "Please ensure yarn.lock or package-lock.json exists, or use --package-manager",
+            "Please ensure yarn.lock, package-lock.json, or go.mod exists, or use --package-manager",
             file=sys.stderr,
         )
         sys.exit(1)

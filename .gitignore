@@ -13,10 +13,26 @@ patch-upgrades-summary.md
 
 # Python cache
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
 
 # Testing cache
 .pytest_cache/
 
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Linting
+.ruff_cache/
+
 # Coverage
 htmlcov/
 .coverage
+coverage.json
+coverage.xml
+*.cover
+.hypothesis/

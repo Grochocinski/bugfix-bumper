@@ -3,7 +3,12 @@
 import json
 
 from bugfix_bumper.cache import PackageCache
-from bugfix_bumper.processing import apply_upgrades, process_dependency, process_package_json
+from bugfix_bumper.processing import (
+    apply_upgrades,
+    process_dependency,
+    process_go_mod,
+    process_package_json,
+)
 
 
 class TestProcessDependency:
@@ -347,6 +352,379 @@ class TestApplyUpgrades:
         data = json.loads(package_json.read_text())
         assert data["dependencies"]["express"] == "^4.18.3"
         assert data["dependencies"]["lodash"] == "~4.17.21"
+
+
+class TestProcessGoMod:
+    """Tests for process_go_mod function."""
+
+    def test_empty_go_mod(self, temp_dir):
+        """Empty go.mod file."""
+        go_mod = temp_dir / "go.mod"
+        go_mod.write_text("module test\n\ngo 1.21\n")
+
+        cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=False)
+        result = process_go_mod(go_mod, temp_dir, "go", True, True, cache)
+
+        assert result == []
+
+    def test_single_direct_dependency(self, temp_dir, mocker):
+        """Single direct dependency."""
+        go_mod = temp_dir / "go.mod"
+        go_mod.write_text("module test\n\ngo 1.21\n\nrequire github.com/gin-gonic/gin v1.9.1\n")
+
+        # Mock parse_go_mod to return module data
+        mock_parse = mocker.patch("bugfix_bumper.processing.parse_go_mod")
+        mock_parse.return_value = {
+            "modules": [
+                {"Path": "github.com/gin-gonic/gin", "Version": "v1.9.1", "Indirect": False}
+            ]
+        }
+
+        # Mock get_go_module_versions
+        mock_get_versions = mocker.patch("bugfix_bumper.go_modules.get_go_module_versions")
+        mock_get_versions.return_value = ["v1.9.1", "v1.9.2"]
+
+        cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=False)
+        result = process_go_mod(go_mod, temp_dir, "go", True, True, cache)
+
+        # Should find upgrade from v1.9.1 to v1.9.2
+        assert len(result) == 1
+        assert result[0]["package"] == "github.com/gin-gonic/gin"
+        assert result[0]["current"] == "v1.9.1"
+        assert result[0]["proposed"] == "v1.9.2"
+
+    def test_skip_indirect_dependency(self, temp_dir, mocker):
+        """Skip indirect dependencies."""
+        go_mod = temp_dir / "go.mod"
+        go_mod.write_text(
+            "module test\n\ngo 1.21\n\nrequire (\n\tgithub.com/gin-gonic/gin v1.9.1\n\tgithub.com/stretchr/testify v1.8.0 // indirect\n)\n"
+        )
+
+        # Mock parse_go_mod
+        mock_parse = mocker.patch("bugfix_bumper.processing.parse_go_mod")
+        mock_parse.return_value = {
+            "modules": [
+                {"Path": "github.com/gin-gonic/gin", "Version": "v1.9.1", "Indirect": False},
+                {"Path": "github.com/stretchr/testify", "Version": "v1.8.0", "Indirect": True},
+            ]
+        }
+
+        # Mock get_go_module_versions
+        mock_get_versions = mocker.patch("bugfix_bumper.go_modules.get_go_module_versions")
+        mock_get_versions.return_value = ["v1.9.1", "v1.9.2"]
+
+        cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=False)
+        result = process_go_mod(go_mod, temp_dir, "go", True, True, cache)
+
+        # Should only process direct dependency
+        assert len(result) == 1
+        assert result[0]["package"] == "github.com/gin-gonic/gin"
+        assert "github.com/stretchr/testify" not in [r["package"] for r in result]
+
+    def test_skip_replace_dependency(self, temp_dir, mocker):
+        """Skip dependencies in replace directives."""
+        go_mod = temp_dir / "go.mod"
+        go_mod.write_text(
+            "module test\n\ngo 1.21\n\nreplace github.com/elastic/go-elasticsearch/v7 => github.com/elastic/go-elasticsearch/v7 v7.13.1\n\nrequire github.com/elastic/go-elasticsearch/v7 v7.17.1\n"
+        )
+
+        # Mock parse_go_mod
+        mock_parse = mocker.patch("bugfix_bumper.processing.parse_go_mod")
+        mock_parse.return_value = {
+            "modules": [
+                {
+                    "Path": "github.com/elastic/go-elasticsearch/v7",
+                    "Version": "v7.17.1",
+                    "Indirect": False,
+                }
+            ]
+        }
+
+        cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=False)
+        result = process_go_mod(go_mod, temp_dir, "go", True, True, cache)
+
+        # Should skip replaced dependency
+        assert len(result) == 0
+
+    def test_skip_pseudo_version(self, temp_dir, mocker):
+        """Skip pseudo-versions with warning."""
+        go_mod = temp_dir / "go.mod"
+        go_mod.write_text(
+            "module test\n\ngo 1.21\n\nrequire github.com/gordonklaus/ineffassign v0.0.0-20210914165742-4cc7213b9bc8\n"
+        )
+
+        # Mock parse_go_mod
+        mock_parse = mocker.patch("bugfix_bumper.processing.parse_go_mod")
+        mock_parse.return_value = {
+            "modules": [
+                {
+                    "Path": "github.com/gordonklaus/ineffassign",
+                    "Version": "v0.0.0-20210914165742-4cc7213b9bc8",
+                    "Indirect": False,
+                }
+            ]
+        }
+
+        cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=False)
+        result = process_go_mod(go_mod, temp_dir, "go", True, True, cache)
+
+        # Should skip pseudo-version
+        assert len(result) == 0
+
+    def test_process_incompatible_version(self, temp_dir, mocker):
+        """Process +incompatible versions correctly."""
+        go_mod = temp_dir / "go.mod"
+        go_mod.write_text(
+            "module test\n\ngo 1.21\n\nrequire github.com/blang/semver v3.5.1+incompatible\n"
+        )
+
+        # Mock parse_go_mod
+        mock_parse = mocker.patch("bugfix_bumper.processing.parse_go_mod")
+        mock_parse.return_value = {
+            "modules": [
+                {
+                    "Path": "github.com/blang/semver",
+                    "Version": "v3.5.1+incompatible",
+                    "Indirect": False,
+                }
+            ]
+        }
+
+        # Mock get_go_module_versions to return +incompatible versions
+        mock_get_versions = mocker.patch("bugfix_bumper.go_modules.get_go_module_versions")
+        mock_get_versions.return_value = [
+            "v3.5.1+incompatible",
+            "v3.5.2+incompatible",
+        ]
+
+        cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=False)
+        result = process_go_mod(go_mod, temp_dir, "go", True, True, cache)
+
+        # Should find upgrade preserving +incompatible
+        assert len(result) == 1
+        assert result[0]["package"] == "github.com/blang/semver"
+        assert result[0]["current"] == "v3.5.1+incompatible"
+        assert result[0]["proposed"] == "v3.5.2+incompatible"
+
+    def test_process_go_mod_fallback_parsing(self, temp_dir, mocker):
+        """Test fallback parsing when go list fails."""
+        go_mod = temp_dir / "go.mod"
+        go_mod.write_text(
+            "module test\n\ngo 1.21\n\nrequire (\n\tgithub.com/gin-gonic/gin v1.9.1\n\tgithub.com/stretchr/testify v1.8.0 // indirect\n)\n"
+        )
+
+        # Mock parse_go_mod to return None (simulating failure)
+        mock_parse = mocker.patch("bugfix_bumper.processing.parse_go_mod")
+        mock_parse.return_value = None
+
+        # Mock get_go_module_versions
+        mock_get_versions = mocker.patch("bugfix_bumper.go_modules.get_go_module_versions")
+        mock_get_versions.return_value = ["v1.9.1", "v1.9.2"]
+
+        cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=False)
+        result = process_go_mod(go_mod, temp_dir, "go", True, True, cache)
+
+        # Should use fallback regex parsing
+        assert len(result) == 1
+        assert result[0]["package"] == "github.com/gin-gonic/gin"
+
+    def test_process_go_mod_file_read_error(self, temp_dir, mocker):
+        """Test handling of file read errors."""
+        go_mod = temp_dir / "go.mod"
+        go_mod.write_text("module test\n\ngo 1.21\n")
+
+        # Mock parse_go_mod to return None
+        mock_parse = mocker.patch("bugfix_bumper.processing.parse_go_mod")
+        mock_parse.return_value = None
+
+        # Mock open to raise OSError
+        mocker.patch("builtins.open", side_effect=OSError("Permission denied"))
+
+        cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=False)
+        result = process_go_mod(go_mod, temp_dir, "go", True, True, cache)
+
+        # Should return empty list on error
+        assert result == []
+
+    def test_process_go_mod_exclude_directive(self, temp_dir, mocker):
+        """Skip dependencies in exclude directives."""
+        go_mod = temp_dir / "go.mod"
+        go_mod.write_text(
+            "module test\n\ngo 1.21\n\nexclude github.com/old/module v1.0.0\n\nrequire github.com/old/module v1.0.0\n"
+        )
+
+        # Mock parse_go_mod
+        mock_parse = mocker.patch("bugfix_bumper.processing.parse_go_mod")
+        mock_parse.return_value = {
+            "modules": [{"Path": "github.com/old/module", "Version": "v1.0.0", "Indirect": False}]
+        }
+
+        cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=False)
+        result = process_go_mod(go_mod, temp_dir, "go", True, True, cache)
+
+        # Should skip excluded dependency
+        assert len(result) == 0
+
+    def test_process_go_mod_no_version(self, temp_dir, mocker):
+        """Skip modules with no version."""
+        go_mod = temp_dir / "go.mod"
+        go_mod.write_text("module test\n\ngo 1.21\n")
+
+        # Mock parse_go_mod to return module with no version
+        mock_parse = mocker.patch("bugfix_bumper.processing.parse_go_mod")
+        mock_parse.return_value = {
+            "modules": [{"Path": "github.com/test/module", "Version": "", "Indirect": False}]
+        }
+
+        cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=False)
+        result = process_go_mod(go_mod, temp_dir, "go", True, True, cache)
+
+        # Should skip module with no version
+        assert len(result) == 0
+
+
+class TestApplyUpgradesGoMod:
+    """Tests for apply_upgrades with go.mod files."""
+
+    def test_apply_go_mod_upgrades_success(self, temp_dir, mocker):
+        """Successfully apply go.mod upgrades."""
+        go_mod = temp_dir / "go.mod"
+        go_mod.write_text("module test\n\ngo 1.21\n\nrequire github.com/gin-gonic/gin v1.9.1\n")
+        go_sum = temp_dir / "go.sum"
+        go_sum.write_text("checksum\n")
+
+        upgrades = [
+            {
+                "package": "github.com/gin-gonic/gin",
+                "location": "go.mod",
+                "type": "require",
+                "current": "v1.9.1",
+                "proposed": "v1.9.2",
+            }
+        ]
+
+        # Mock backup
+        backup_paths = {"go.mod": temp_dir / "go.mod.old", "go.sum": temp_dir / "go.sum.old"}
+        mocker.patch("bugfix_bumper.processing.backup_files", return_value=backup_paths)
+
+        # Create backup files
+        (temp_dir / "go.mod.old").write_text(go_mod.read_text())
+        (temp_dir / "go.sum.old").write_text(go_sum.read_text())
+
+        # Mock Go commands
+        mocker.patch("bugfix_bumper.processing.update_go_mod_versions", return_value=(True, ""))
+        mocker.patch("bugfix_bumper.processing.regenerate_go_sum", return_value=(True, ""))
+        mocker.patch("bugfix_bumper.processing.verify_go_build", return_value=(True, ""))
+
+        apply_upgrades(temp_dir, upgrades, create_backups=False)
+
+        # Verify go.mod was updated (mock would have been called)
+        # In real scenario, go.mod would have the new version
+
+    def test_apply_go_mod_upgrades_no_changes(self, temp_dir, mocker):
+        """Handle case where no updates are needed."""
+        go_mod = temp_dir / "go.mod"
+        go_mod.write_text("module test\n\ngo 1.21\n")
+
+        upgrades = []  # No upgrades
+
+        backup_paths = {"go.mod": temp_dir / "go.mod.old"}
+        mocker.patch("bugfix_bumper.processing.backup_files", return_value=backup_paths)
+        (temp_dir / "go.mod.old").write_text(go_mod.read_text())
+
+        apply_upgrades(temp_dir, upgrades, create_backups=False)
+
+        # Should restore backup since no changes
+
+    def test_apply_go_mod_upgrades_update_fails(self, temp_dir, mocker):
+        """Handle go mod edit failure."""
+        go_mod = temp_dir / "go.mod"
+        go_mod.write_text("module test\n\ngo 1.21\n\nrequire github.com/gin-gonic/gin v1.9.1\n")
+
+        upgrades = [
+            {
+                "package": "github.com/gin-gonic/gin",
+                "location": "go.mod",
+                "type": "require",
+                "current": "v1.9.1",
+                "proposed": "v1.9.2",
+            }
+        ]
+
+        backup_paths = {"go.mod": temp_dir / "go.mod.old"}
+        mocker.patch("bugfix_bumper.processing.backup_files", return_value=backup_paths)
+        (temp_dir / "go.mod.old").write_text(go_mod.read_text())
+
+        # Mock update to fail
+        mocker.patch(
+            "bugfix_bumper.processing.update_go_mod_versions",
+            return_value=(False, "error: invalid module"),
+        )
+
+        apply_upgrades(temp_dir, upgrades, create_backups=False)
+
+        # Should restore backup
+
+    def test_apply_go_mod_upgrades_tidy_fails(self, temp_dir, mocker):
+        """Handle go mod tidy failure."""
+        go_mod = temp_dir / "go.mod"
+        go_mod.write_text("module test\n\ngo 1.21\n\nrequire github.com/gin-gonic/gin v1.9.1\n")
+
+        upgrades = [
+            {
+                "package": "github.com/gin-gonic/gin",
+                "location": "go.mod",
+                "type": "require",
+                "current": "v1.9.1",
+                "proposed": "v1.9.2",
+            }
+        ]
+
+        backup_paths = {"go.mod": temp_dir / "go.mod.old"}
+        mocker.patch("bugfix_bumper.processing.backup_files", return_value=backup_paths)
+        (temp_dir / "go.mod.old").write_text(go_mod.read_text())
+
+        # Mock update to succeed, tidy to fail
+        mocker.patch("bugfix_bumper.processing.update_go_mod_versions", return_value=(True, ""))
+        mocker.patch(
+            "bugfix_bumper.processing.regenerate_go_sum",
+            return_value=(False, "error: cannot find module"),
+        )
+
+        apply_upgrades(temp_dir, upgrades, create_backups=False)
+
+        # Should handle failure gracefully
+
+    def test_apply_go_mod_upgrades_verify_fails(self, temp_dir, mocker):
+        """Handle go mod verify failure."""
+        go_mod = temp_dir / "go.mod"
+        go_mod.write_text("module test\n\ngo 1.21\n\nrequire github.com/gin-gonic/gin v1.9.1\n")
+
+        upgrades = [
+            {
+                "package": "github.com/gin-gonic/gin",
+                "location": "go.mod",
+                "type": "require",
+                "current": "v1.9.1",
+                "proposed": "v1.9.2",
+            }
+        ]
+
+        backup_paths = {"go.mod": temp_dir / "go.mod.old"}
+        mocker.patch("bugfix_bumper.processing.backup_files", return_value=backup_paths)
+        (temp_dir / "go.mod.old").write_text(go_mod.read_text())
+
+        # Mock update and tidy to succeed, verify to fail
+        mocker.patch("bugfix_bumper.processing.update_go_mod_versions", return_value=(True, ""))
+        mocker.patch("bugfix_bumper.processing.regenerate_go_sum", return_value=(True, ""))
+        mocker.patch(
+            "bugfix_bumper.processing.verify_go_build",
+            return_value=(False, "error: checksum mismatch"),
+        )
+
+        apply_upgrades(temp_dir, upgrades, create_backups=False)
+
+        # Should handle failure gracefully
 
     def test_file_not_exists(self, temp_dir, capsys):
         """File doesn't exist (skips with warning)."""

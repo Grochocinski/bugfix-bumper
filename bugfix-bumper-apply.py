@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Apply patch version upgrades from a generated report.
-This script reads the JSON report and updates package.json files accordingly.
+This script reads the JSON report and updates package.json or go.mod files accordingly.
 """
 
 import argparse
@@ -27,8 +27,8 @@ EXAMPLES:
     %(prog)s --restore --root /path/to/repo
 
 NOTES:
-    - Automatically regenerates package-lock.json or yarn.lock files
-    - Verifies builds with npm ci or yarn install --frozen-lockfile
+    - Automatically regenerates package-lock.json, yarn.lock, or go.sum files
+    - Verifies builds with npm ci, yarn install --frozen-lockfile, or go mod verify
     - Use --restore to revert changes from .old backup files
         """,
     )
@@ -114,7 +114,13 @@ NOTES:
     print()
 
     # Confirm before applying
-    print("This will modify the following package.json files:")
+    file_type = "files"
+    if upgrades:
+        # Determine file type from first upgrade
+        first_location = upgrades[0]["location"]
+        file_type = "go.mod files" if first_location.endswith("go.mod") else "package.json files"
+
+    print(f"This will modify the following {file_type}:")
     locations = sorted({u["location"] for u in upgrades})
     for location in locations:
         print(f"  - {location}")

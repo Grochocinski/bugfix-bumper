@@ -1,17 +1,18 @@
 # Bugfix Bumper
 
-A tool to automatically find and apply patch version upgrades for npm packages in your repository. Only upgrades patch versions (bugfix releases) within the same major.minor version, avoiding breaking changes.
+A tool to automatically find and apply patch version upgrades for npm/yarn packages and Go modules in your repository. Only upgrades patch versions (bugfix releases) within the same major.minor version, avoiding breaking changes.
 
 ## Features
 
-- **Scans all package.json files** - Works with single repos and monorepos (Yarn/npm workspaces)
+- **Scans all package.json and go.mod files** - Works with single repos and monorepos (Yarn/npm workspaces, multiple go.mod files)
 - **Patch versions only** - Only suggests bugfix upgrades, never major or minor bumps
 - **No pre-releases** - Filters out canary, beta, alpha, and RC versions
 - **Two-stage workflow** - Generate a report for review, then apply approved upgrades
-- **Multi-package manager** - Supports Yarn and npm
+- **Multi-package manager** - Supports Yarn, npm, and Go modules
 - **Detailed reports** - JSON and markdown summaries for easy review
 - **Optional backups** - Can create backups with `--backup` flag (default: False, since files are version controlled)
 - **Smart caching** - Caches package version data to reduce redundant API calls (6-hour TTL, configurable)
+- **Go module support** - Handles `+incompatible` versions, skips pseudo-versions, preserves `// indirect` comments
 
 ## Alternatives
 
@@ -29,15 +30,16 @@ npm install
 
 **When to use bugfix-bumper:**
 - You want a two-stage workflow (generate report → review → apply)
-- Working with monorepos or multiple package.json files
+- Working with monorepos or multiple package.json/go.mod files
 - You want detailed JSON/markdown reports for review
 - You need better visibility into what will change before applying
-- Future: Support for multiple package managers (Go modules, etc.)
+- You need support for Go modules alongside npm/yarn
 
 ## Requirements
 
 - Python 3.8+ (no external dependencies required)
-- `yarn` or `npm` (depending on your project)
+- `yarn` or `npm` (for npm/yarn projects)
+- `go` command (for Go module projects)
 
 ## Installation
 
@@ -62,8 +64,8 @@ chmod +x bugfix-bumper-*.py
 ```
 
 This will:
-- Auto-detect your package manager (Yarn or npm)
-- Scan all `package.json` files in your repository
+- Auto-detect your package manager (Yarn, npm, or Go)
+- Scan all `package.json` or `go.mod` files in your repository
 - Find available patch version upgrades
 - Generate two files:
   - `patch-upgrades.json` - Machine-readable JSON report
@@ -97,6 +99,10 @@ yarn install
 
 # For npm
 npm install
+
+# For Go modules
+# go mod tidy is automatically run during apply, but you can run it again if needed
+go mod tidy
 ```
 
 ## Command-Line Options
@@ -109,7 +115,7 @@ Usage: bugfix-bumper-generate.py [OPTIONS]
 OPTIONS:
     -r, --root DIR              Repository root directory (default: current directory)
     -o, --output-dir DIR         Output directory for reports (default: current directory)
-    -p, --package-manager PM     Force package manager: yarn or npm (default: auto-detect)
+    -p, --package-manager PM     Force package manager: yarn, npm, or go (default: auto-detect)
     --no-dev                     Exclude devDependencies
     --no-prod                    Exclude dependencies
     --clear-cache                Clear the persistent cache file before running
@@ -200,30 +206,39 @@ cat patch-upgrades-summary.md
 
 ## How It Works
 
-1. **Package Manager Detection**: Automatically detects Yarn or npm by checking for `yarn.lock` or `package-lock.json`
+1. **Package Manager Detection**: Automatically detects Yarn, npm, or Go by checking for:
+   - `yarn.lock` or `package-lock.json` (npm/yarn)
+   - `go.mod` (Go modules)
 
-2. **Workspace Detection**: Finds all `package.json` files by:
-   - Reading the `workspaces` array from root `package.json` (Yarn/npm workspaces)
-   - Including the root `package.json`
+2. **File Detection**: Finds all relevant files:
+   - For npm/yarn: Finds all `package.json` files by reading the `workspaces` array from root `package.json` (Yarn/npm workspaces) and including the root `package.json`
+   - For Go: Finds all `go.mod` files recursively in the repository
 
 3. **Version Analysis**: For each dependency:
-   - Extracts the current version constraint (e.g., `^1.2.3`)
+   - Extracts the current version constraint (e.g., `^1.2.3` for npm, `v1.2.3` for Go)
    - Determines the major.minor version (e.g., `1.2`)
-   - Queries the package registry for all available versions (uses cache when available)
-   - Finds the latest patch version within the same major.minor (e.g., `1.2.5`)
-   - Filters out pre-release versions (anything with `-`)
+   - Queries the package registry/module versions (uses cache when available):
+     - npm/yarn: Uses `npm view` command
+     - Go: Uses `go list -m -versions` command
+   - Finds the latest patch version within the same major.minor (e.g., `1.2.5` or `v1.2.5`)
+   - Filters out pre-release versions (anything with `-alpha`, `-beta`, `-rc`)
+   - For Go: Filters out pseudo-versions (commit-based versions)
+   - For Go: Handles `+incompatible` versions correctly (preserves suffix)
    - Caches results to reduce redundant API calls (6-hour TTL by default)
 
 4. **Report Generation**: Creates a JSON report with all upgrade candidates
 
 5. **Safe Application**: When applying:
-   - Creates backups of all modified files
+   - Creates backups of all modified files (package.json/go.mod and lock files/go.sum)
    - Validates current versions match before updating
+   - For Go: Uses `go mod edit` to update versions (preserves formatting and comments)
+   - For Go: Runs `go mod tidy` to update go.sum
+   - For Go: Verifies with `go mod verify`
    - Provides detailed feedback on success/failure
 
 ## Supported Scenarios
 
-### Single package.json Repository
+### Single package.json or go.mod Repository
 
 Works out of the box - just run the script in your repository root.
 
@@ -240,6 +255,16 @@ Automatically detects and processes all workspace packages defined in the root `
 ### npm Workspaces
 
 Same as Yarn workspaces - uses the same `workspaces` format in `package.json`.
+
+### Go Modules
+
+Automatically detects and processes all `go.mod` files in the repository. Each `go.mod` file is processed independently. Supports:
+- Multiple `go.mod` files in monorepos
+- Direct dependencies only (skips `// indirect` dependencies)
+- `+incompatible` versions (preserves suffix when upgrading)
+- Skips pseudo-versions (commit-based versions)
+- Skips dependencies in `replace` directives
+- Skips dependencies in `exclude` directives
 
 ## Output Files
 
@@ -258,6 +283,16 @@ JSON array of upgrade objects:
     "majorMinor": "4.18",
     "currentPatch": 1,
     "proposedPatch": 3
+  },
+  {
+    "package": "github.com/gin-gonic/gin",
+    "location": "go.mod",
+    "type": "require",
+    "current": "v1.9.1",
+    "proposed": "v1.9.2",
+    "majorMinor": "1.9",
+    "currentPatch": 1,
+    "proposedPatch": 2
   }
 ]
 ```
@@ -322,15 +357,19 @@ The scripts themselves require no external dependencies - only the tests need py
 
 ### "Could not detect package manager"
 
-Ensure you have either `yarn.lock` or `package-lock.json` in your repository root, or use `--package-manager` to specify manually.
+Ensure you have either `yarn.lock`, `package-lock.json`, or `go.mod` in your repository root, or use `--package-manager` to specify manually.
 
-### "No package.json found"
+### "No package.json found" or "No go.mod files found"
 
-Run the script from a directory containing a `package.json` file, or use `--root` to specify the repository root.
+Run the script from a directory containing a `package.json` or `go.mod` file, or use `--root` to specify the repository root.
 
 ### Package not found errors
 
-Some packages may not be available in the npm registry, or may have been unpublished. These will be skipped automatically.
+Some packages/modules may not be available in the npm registry or Go module proxy, or may have been unpublished. These will be skipped automatically with a warning.
+
+### Go module version discovery failures
+
+If `go list -m -versions` fails (e.g., for private modules or network issues), the module will be skipped with a warning. The script will continue processing other modules.
 
 ### Version mismatch warnings
 

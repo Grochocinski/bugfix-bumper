@@ -50,6 +50,21 @@ class TestExtractMajorMinor:
         assert extract_major_minor("alpha") is None
         assert extract_major_minor("rc") is None
 
+    def test_go_version_with_v_prefix(self):
+        """Go versions with 'v' prefix."""
+        assert extract_major_minor("v1.2.3") == "1.2"
+        assert extract_major_minor("v1.2.3+incompatible") == "1.2"
+        assert extract_major_minor("v1.2") == "1.2"
+
+    def test_go_pseudo_version(self):
+        """Go pseudo-versions return None."""
+        assert extract_major_minor("v0.0.0-20211024170158-b87d35c0b86f") is None
+        assert extract_major_minor("v1.2.1-0.20220228012449-10b1cf09e00b") is None
+
+    def test_go_version_without_patch(self):
+        """Go version without patch number."""
+        assert extract_major_minor("v1.2") == "1.2"
+
 
 class TestExtractBaseVersion:
     """Tests for extract_base_version function."""
@@ -154,3 +169,53 @@ class TestFindLatestPatch:
 
         result = find_latest_patch("test-package", "1.2.1", "1.2", "yarn", temp_dir, cache)
         assert result == "1.2.10"
+
+
+class TestFindLatestPatchGo:
+    """Tests for find_latest_patch function with Go modules."""
+
+    def test_find_latest_patch_go_version(self, temp_dir, mocker):
+        """Find latest patch for Go version."""
+        cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
+        mocker.patch(
+            "bugfix_bumper.go_modules.get_go_module_versions",
+            return_value=["v1.2.0", "v1.2.1", "v1.2.2", "v1.2.3", "v1.3.0"],
+        )
+
+        result = find_latest_patch("test-module", "v1.2.1", "1.2", "go", temp_dir, cache)
+        assert result == "v1.2.3"
+
+    def test_find_latest_patch_go_incompatible(self, temp_dir, mocker):
+        """Find latest patch for Go +incompatible version."""
+        cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
+        mocker.patch(
+            "bugfix_bumper.go_modules.get_go_module_versions",
+            return_value=["v3.5.1+incompatible", "v3.5.2+incompatible", "v3.6.0"],
+        )
+
+        result = find_latest_patch(
+            "test-module", "v3.5.1+incompatible", "3.5", "go", temp_dir, cache
+        )
+        assert result == "v3.5.2+incompatible"
+
+    def test_find_latest_patch_go_filters_pre_releases(self, temp_dir, mocker):
+        """Filter out pre-release versions for Go."""
+        cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
+        mocker.patch(
+            "bugfix_bumper.go_modules.get_go_module_versions",
+            return_value=["v1.2.1", "v1.2.2", "v1.2.3-beta.1", "v1.2.4"],
+        )
+
+        result = find_latest_patch("test-module", "v1.2.1", "1.2", "go", temp_dir, cache)
+        assert result == "v1.2.4"  # Should skip v1.2.3-beta.1
+
+    def test_find_latest_patch_go_no_matching(self, temp_dir, mocker):
+        """No matching versions for Go (returns None)."""
+        cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
+        mocker.patch(
+            "bugfix_bumper.go_modules.get_go_module_versions",
+            return_value=["v1.3.0", "v1.3.1"],
+        )
+
+        result = find_latest_patch("test-module", "v1.2.1", "1.2", "go", temp_dir, cache)
+        assert result is None

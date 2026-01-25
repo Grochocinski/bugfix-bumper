@@ -3,7 +3,7 @@
 import json
 import subprocess
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 if TYPE_CHECKING:
     from bugfix_bumper.cache import PackageCache
@@ -77,7 +77,7 @@ def get_package_versions(
 
 
 def regenerate_lock_file(
-    package_json_dir: Path, package_manager: str, repo_root: Path = None
+    package_json_dir: Path, package_manager: str, repo_root: Optional[Path] = None
 ) -> Tuple[bool, str]:
     """
     Regenerate lock file by running npm install or yarn install.

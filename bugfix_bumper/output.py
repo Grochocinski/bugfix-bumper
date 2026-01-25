@@ -33,11 +33,18 @@ def generate_summary(upgrades: List[Dict], package_manager: str, repo_root: Path
 
         for package in sorted(by_package.keys()):
             upgrade = by_package[package][0]
+            # For Go modules, type is "require", for npm/yarn it's "dependencies" or "devDependencies"
+            dep_type = upgrade["type"]
+            if package_manager == "go" and dep_type == "require":
+                type_label = "require (direct)"
+            else:
+                type_label = dep_type
+
             lines.extend(
                 [
                     f"### {package}",
                     f"- **Location**: {upgrade['location']}",
-                    f"- **Type**: {upgrade['type']}",
+                    f"- **Type**: {type_label}",
                     f"- **Current**: {upgrade['current']}",
                     f"- **Proposed**: {upgrade['proposed']}",
                     f"- **Version**: {upgrade['majorMinor']}.x ({upgrade['currentPatch']} → {upgrade['proposedPatch']})",
@@ -56,8 +63,13 @@ def generate_summary(upgrades: List[Dict], package_manager: str, repo_root: Path
             lines.append(f"### {location}")
             lines.append("")
             for upgrade in by_location[location]:
+                dep_type = upgrade["type"]
+                if package_manager == "go" and dep_type == "require":
+                    type_label = "require"
+                else:
+                    type_label = dep_type
                 lines.append(
-                    f"- {upgrade['package']} ({upgrade['type']}): {upgrade['current']} → {upgrade['proposed']}"
+                    f"- {upgrade['package']} ({type_label}): {upgrade['current']} → {upgrade['proposed']}"
                 )
             lines.append("")
     else:

@@ -68,40 +68,108 @@ def find_package_json_files(repo_root: Path) -> List[Path]:
     return files
 
 
+def find_go_mod_files(repo_root: Path) -> List[Path]:
+    """Find all go.mod files in the repository, recursively searching subdirectories."""
+    files = []
+
+    # Directories to exclude from search (skip entire subtrees)
+    excluded_dirs = {
+        "node_modules",
+        ".git",
+        "vendor",
+    }
+
+    # Check if root go.mod exists
+    root_go_mod = repo_root / "go.mod"
+    if root_go_mod.exists():
+        files.append(root_go_mod)
+
+    # Use os.walk for efficient directory tree traversal with early skipping
+    repo_root_str = str(repo_root)
+    seen_files = {Path(f) for f in files}  # Track files we've already added
+
+    for root, dirs, filenames in os.walk(repo_root_str):
+        # Skip excluded directories by removing them from dirs list
+        # This prevents os.walk from descending into them
+        dirs[:] = [
+            d for d in dirs if d not in excluded_dirs and not d.startswith(".package-json-backups-")
+        ]
+
+        # Check if current directory should be skipped
+        root_path = Path(root)
+        if any(
+            part in excluded_dirs or part.startswith(".package-json-backups-")
+            for part in root_path.parts
+        ):
+            continue
+
+        # Check for go.mod in current directory
+        if "go.mod" in filenames:
+            go_mod = root_path / "go.mod"
+            if go_mod not in seen_files:
+                files.append(go_mod)
+                seen_files.add(go_mod)
+
+    # Sort for consistent ordering
+    files.sort()
+    return files
+
+
 def backup_files(package_json: Path) -> Dict[str, Path]:
     """
     Backup package.json, lock files, and node_modules by renaming to .old versions.
+    Also handles go.mod and go.sum files for Go modules.
     Returns dict mapping original names to backup paths.
     """
     backup_paths = {}
     package_dir = package_json.parent
 
-    # Backup package.json
-    if package_json.exists():
-        backup_path = package_json.with_suffix(package_json.suffix + ".old")
-        package_json.rename(backup_path)
-        backup_paths["package.json"] = backup_path
+    # Determine if this is a go.mod file (passed as package_json parameter)
+    is_go_mod = package_json.name == "go.mod"
+    is_package_json = package_json.name == "package.json"
 
-    # Backup package-lock.json
-    lock_file = package_dir / "package-lock.json"
-    if lock_file.exists():
-        backup_path = lock_file.with_suffix(lock_file.suffix + ".old")
-        lock_file.rename(backup_path)
-        backup_paths["package-lock.json"] = backup_path
+    if is_go_mod:
+        # Backup go.mod
+        if package_json.exists():
+            backup_path = package_json.with_suffix(package_json.suffix + ".old")
+            package_json.rename(backup_path)
+            backup_paths["go.mod"] = backup_path
 
-    # Backup yarn.lock
-    yarn_lock = package_dir / "yarn.lock"
-    if yarn_lock.exists():
-        backup_path = yarn_lock.with_suffix(yarn_lock.suffix + ".old")
-        yarn_lock.rename(backup_path)
-        backup_paths["yarn.lock"] = backup_path
+        # Backup go.sum (changes when go.mod changes)
+        go_sum = package_dir / "go.sum"
+        if go_sum.exists():
+            backup_path = go_sum.with_suffix(go_sum.suffix + ".old")
+            go_sum.rename(backup_path)
+            backup_paths["go.sum"] = backup_path
 
-    # Backup node_modules
-    node_modules = package_dir / "node_modules"
-    if node_modules.exists() and node_modules.is_dir():
-        backup_path = package_dir / "node_modules.old"
-        node_modules.rename(backup_path)
-        backup_paths["node_modules"] = backup_path
+        # Don't backup vendor/ directory (too large, not critical)
+    elif is_package_json:
+        # Backup package.json
+        if package_json.exists():
+            backup_path = package_json.with_suffix(package_json.suffix + ".old")
+            package_json.rename(backup_path)
+            backup_paths["package.json"] = backup_path
+
+        # Backup package-lock.json
+        lock_file = package_dir / "package-lock.json"
+        if lock_file.exists():
+            backup_path = lock_file.with_suffix(lock_file.suffix + ".old")
+            lock_file.rename(backup_path)
+            backup_paths["package-lock.json"] = backup_path
+
+        # Backup yarn.lock
+        yarn_lock = package_dir / "yarn.lock"
+        if yarn_lock.exists():
+            backup_path = yarn_lock.with_suffix(yarn_lock.suffix + ".old")
+            yarn_lock.rename(backup_path)
+            backup_paths["yarn.lock"] = backup_path
+
+        # Backup node_modules
+        node_modules = package_dir / "node_modules"
+        if node_modules.exists() and node_modules.is_dir():
+            backup_path = package_dir / "node_modules.old"
+            node_modules.rename(backup_path)
+            backup_paths["node_modules"] = backup_path
 
     return backup_paths
 
@@ -134,7 +202,7 @@ def restore_files(backup_paths: Dict[str, Path]) -> None:
 def find_backup_files(repo_root: Path) -> List[Dict[str, Path]]:
     """
     Find all .old backup files in the repository.
-    Returns list of backup_paths dicts, one per package.json.old found.
+    Returns list of backup_paths dicts, one per package.json.old or go.mod.old found.
     """
     backup_groups = []
 
@@ -158,6 +226,18 @@ def find_backup_files(repo_root: Path) -> List[Dict[str, Path]]:
 
         backup_groups.append(backup_paths)
 
+    # Find all go.mod.old files
+    for go_mod_old in repo_root.rglob("go.mod.old"):
+        package_dir = go_mod_old.parent
+        backup_paths = {"go.mod": go_mod_old}
+
+        # Check for go.sum.old in same directory
+        go_sum_old = package_dir / "go.sum.old"
+        if go_sum_old.exists():
+            backup_paths["go.sum"] = go_sum_old
+
+        backup_groups.append(backup_paths)
+
     return backup_groups
 
 
@@ -172,17 +252,34 @@ def restore_all_backups(repo_root: Path) -> int:
         print("No backup files found to restore.")
         return 0
 
-    print(f"Found {len(backup_groups)} package.json backup(s) to restore")
+    # Count package.json and go.mod backups separately for better messaging
+    package_json_backups = sum(1 for bg in backup_groups if "package.json" in bg)
+    go_mod_backups = sum(1 for bg in backup_groups if "go.mod" in bg)
+
+    if package_json_backups > 0 and go_mod_backups > 0:
+        print(
+            f"Found {package_json_backups} package.json backup(s) and {go_mod_backups} go.mod backup(s) to restore"
+        )
+    elif package_json_backups > 0:
+        print(f"Found {package_json_backups} package.json backup(s) to restore")
+    elif go_mod_backups > 0:
+        print(f"Found {go_mod_backups} go.mod backup(s) to restore")
     print()
 
     restored_items = []
     for backup_paths in backup_groups:
+        # Handle both package.json and go.mod backups
         package_json_old = backup_paths.get("package.json")
-        if not package_json_old or not package_json_old.exists():
-            continue
+        go_mod_old = backup_paths.get("go.mod")
 
-        location = str(package_json_old.relative_to(repo_root))[:-9]  # Remove .old suffix
-        print(f"Restoring: {location}")
+        if package_json_old and package_json_old.exists():
+            location = str(package_json_old.relative_to(repo_root))[:-9]  # Remove .old suffix
+            print(f"Restoring: {location}")
+        elif go_mod_old and go_mod_old.exists():
+            location = str(go_mod_old.relative_to(repo_root))[:-9]  # Remove .old suffix
+            print(f"Restoring: {location}")
+        else:
+            continue
 
         try:
             # Track what will be restored BEFORE calling restore_files

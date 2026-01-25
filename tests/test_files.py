@@ -6,6 +6,7 @@ from bugfix_bumper.files import (
     backup_files,
     cleanup_backups,
     find_backup_files,
+    find_go_mod_files,
     find_package_json_files,
     restore_all_backups,
     restore_files,
@@ -444,3 +445,145 @@ class TestCleanupBackups:
             cleanup_backups(backup_paths, keep_backups=False)
             # Should have printed warning
             assert "Warning" in stderr.getvalue() or "Could not delete" in stderr.getvalue()
+
+
+class TestFindGoModFiles:
+    """Tests for find_go_mod_files function."""
+
+    def test_root_only(self, temp_dir):
+        """Root go.mod only."""
+        go_mod = temp_dir / "go.mod"
+        go_mod.write_text("module test\n\ngo 1.21\n")
+
+        result = find_go_mod_files(temp_dir)
+        assert len(result) == 1
+        assert result[0] == go_mod
+
+    def test_multiple_go_mod_files(self, temp_dir):
+        """Multiple go.mod files in subdirectories."""
+        root_go_mod = temp_dir / "go.mod"
+        root_go_mod.write_text("module test\n\ngo 1.21\n")
+
+        subdir = temp_dir / "subdir"
+        subdir.mkdir()
+        subdir_go_mod = subdir / "go.mod"
+        subdir_go_mod.write_text("module test/subdir\n\ngo 1.21\n")
+
+        result = find_go_mod_files(temp_dir)
+        assert len(result) == 2
+        assert root_go_mod in result
+        assert subdir_go_mod in result
+
+    def test_excludes_vendor(self, temp_dir):
+        """Excludes go.mod files in vendor directory."""
+        root_go_mod = temp_dir / "go.mod"
+        root_go_mod.write_text("module test\n\ngo 1.21\n")
+
+        vendor_dir = temp_dir / "vendor"
+        vendor_dir.mkdir()
+        vendor_go_mod = vendor_dir / "go.mod"
+        vendor_go_mod.write_text("module vendor/test\n\ngo 1.21\n")
+
+        result = find_go_mod_files(temp_dir)
+        assert len(result) == 1
+        assert root_go_mod in result
+        assert vendor_go_mod not in result
+
+    def test_excludes_node_modules(self, temp_dir):
+        """Excludes go.mod files in node_modules directory."""
+        root_go_mod = temp_dir / "go.mod"
+        root_go_mod.write_text("module test\n\ngo 1.21\n")
+
+        node_modules_dir = temp_dir / "node_modules"
+        node_modules_dir.mkdir()
+        nm_go_mod = node_modules_dir / "go.mod"
+        nm_go_mod.write_text("module nm/test\n\ngo 1.21\n")
+
+        result = find_go_mod_files(temp_dir)
+        assert len(result) == 1
+        assert root_go_mod in result
+        assert nm_go_mod not in result
+
+    def test_no_go_mod_files(self, temp_dir):
+        """No go.mod files found."""
+        result = find_go_mod_files(temp_dir)
+        assert result == []
+
+
+class TestBackupGoModFiles:
+    """Tests for backup_files with go.mod files."""
+
+    def test_backup_go_mod_and_go_sum(self, temp_dir):
+        """Backup go.mod and go.sum files."""
+        go_mod = temp_dir / "go.mod"
+        go_sum = temp_dir / "go.sum"
+        go_mod.write_text("module test\n\ngo 1.21\n")
+        go_sum.write_text("test checksum\n")
+
+        backup_paths = backup_files(go_mod)
+
+        assert "go.mod" in backup_paths
+        assert "go.sum" in backup_paths
+        assert backup_paths["go.mod"].name == "go.mod.old"
+        assert backup_paths["go.sum"].name == "go.sum.old"
+        assert not go_mod.exists()
+        assert not go_sum.exists()
+        assert backup_paths["go.mod"].exists()
+        assert backup_paths["go.sum"].exists()
+
+    def test_backup_go_mod_only(self, temp_dir):
+        """Backup go.mod when go.sum doesn't exist."""
+        go_mod = temp_dir / "go.mod"
+        go_mod.write_text("module test\n\ngo 1.21\n")
+
+        backup_paths = backup_files(go_mod)
+
+        assert "go.mod" in backup_paths
+        assert "go.sum" not in backup_paths
+        assert backup_paths["go.mod"].name == "go.mod.old"
+        assert not go_mod.exists()
+        assert backup_paths["go.mod"].exists()
+
+
+class TestRestoreAllBackupsGoMod:
+    """Tests for restore_all_backups with go.mod files."""
+
+    def test_restore_go_mod_backup(self, temp_dir):
+        """Restore go.mod.old backup."""
+        go_mod_old = temp_dir / "go.mod.old"
+        go_sum_old = temp_dir / "go.sum.old"
+        go_mod_old.write_text("module test\n\ngo 1.21\n")
+        go_sum_old.write_text("checksum\n")
+
+        result = restore_all_backups(temp_dir)
+
+        assert result == 2  # 2 files restored
+        assert (temp_dir / "go.mod").exists()
+        assert (temp_dir / "go.sum").exists()
+        assert not go_mod_old.exists()
+        assert not go_sum_old.exists()
+
+    def test_restore_all_backups_mixed(self, temp_dir):
+        """Restore both package.json and go.mod backups."""
+        package_json_old = temp_dir / "package.json.old"
+        package_json_old.write_text('{"name": "test"}')
+
+        go_mod_old = temp_dir / "go.mod.old"
+        go_mod_old.write_text("module test\n\ngo 1.21\n")
+
+        result = restore_all_backups(temp_dir)
+
+        assert result >= 2  # At least 2 files restored
+        assert (temp_dir / "package.json").exists()
+        assert (temp_dir / "go.mod").exists()
+
+    def test_restore_all_backups_go_mod_missing_go_mod_old(self, temp_dir):
+        """Handle missing go.mod.old gracefully."""
+        # Create go.sum.old but no go.mod.old
+        go_sum_old = temp_dir / "go.sum.old"
+        go_sum_old.write_text("checksum\n")
+
+        result = restore_all_backups(temp_dir)
+
+        # Should still work, just won't restore go.mod
+        assert result >= 0

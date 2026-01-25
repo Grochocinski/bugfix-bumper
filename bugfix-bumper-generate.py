@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Generate a report of available patch version upgrades for all packages.
-This script scans all package.json files and finds patch version upgrades
+This script scans all package.json or go.mod files and finds patch version upgrades
 without modifying any files (read-only).
 """
 
@@ -12,10 +12,10 @@ import sys
 from pathlib import Path
 
 from bugfix_bumper.cache import PackageCache
-from bugfix_bumper.files import find_package_json_files
+from bugfix_bumper.files import find_go_mod_files, find_package_json_files
 from bugfix_bumper.output import generate_summary
 from bugfix_bumper.package_manager import check_package_manager, detect_package_manager
-from bugfix_bumper.processing import process_package_json
+from bugfix_bumper.processing import process_go_mod, process_package_json
 
 
 def main():
@@ -51,8 +51,8 @@ EXAMPLES:
     parser.add_argument(
         "-p",
         "--package-manager",
-        choices=["yarn", "npm"],
-        help="Force package manager: yarn or npm (default: auto-detect)",
+        choices=["yarn", "npm", "go"],
+        help="Force package manager: yarn, npm, or go (default: auto-detect)",
     )
     parser.add_argument("--no-dev", action="store_true", help="Exclude devDependencies")
     parser.add_argument("--no-prod", action="store_true", help="Exclude dependencies")
@@ -80,17 +80,32 @@ EXAMPLES:
     bugfix_bumper_dir = Path(__file__).parent.resolve()
     cache_file = bugfix_bumper_dir / ".bugfix-bumper-cache.json"
 
-    # Find all package.json files (validation happens here)
-    package_json_files = find_package_json_files(repo_root)
-    if not package_json_files:
-        print(
-            f"Error: No package.json files found in {repo_root} or subdirectories", file=sys.stderr
-        )
-        print(
-            "Please run this script from a directory containing package.json file(s).",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+    # Detect package manager
+    package_manager = detect_package_manager(repo_root, args.package_manager)
+    check_package_manager(package_manager)
+
+    # Find files based on package manager
+    if package_manager == "go":
+        files = find_go_mod_files(repo_root)
+        if not files:
+            print(f"Error: No go.mod files found in {repo_root} or subdirectories", file=sys.stderr)
+            print(
+                "Please run this script from a directory containing go.mod file(s).",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+    else:
+        files = find_package_json_files(repo_root)
+        if not files:
+            print(
+                f"Error: No package.json files found in {repo_root} or subdirectories",
+                file=sys.stderr,
+            )
+            print(
+                "Please run this script from a directory containing package.json file(s).",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
     # Initialize cache
     use_cache = not args.no_cache
@@ -101,11 +116,8 @@ EXAMPLES:
     else:
         cache = PackageCache(cache_file, args.cache_ttl, use_cache)
 
-    # Detect package manager
-    package_manager = detect_package_manager(repo_root, args.package_manager)
-    check_package_manager(package_manager)
-
-    print("Scanning package.json files for patch version upgrades...")
+    file_type = "go.mod files" if package_manager == "go" else "package.json files"
+    print(f"Scanning {file_type} for patch version upgrades...")
     print(f"Package manager: {package_manager}")
     print(f"Repository root: {repo_root}")
     print(f"Output directory: {output_dir}")
@@ -115,23 +127,33 @@ EXAMPLES:
         print("Cache: disabled for this run")
     print()
 
-    # Use the package.json files we already found during validation
-    total_files = len(package_json_files)
+    # Use the files we already found during validation
+    total_files = len(files)
 
-    # Process each package.json file
+    # Process each file
     all_upgrades = []
-    for i, package_json in enumerate(package_json_files, 1):
-        location = str(package_json.relative_to(repo_root))
+    for i, file_path in enumerate(files, 1):
+        location = str(file_path.relative_to(repo_root))
         print(f"[{i}/{total_files}] Processing: {location}")
 
-        upgrades = process_package_json(
-            package_json,
-            repo_root,
-            package_manager,
-            include_dev=not args.no_dev,
-            include_prod=not args.no_prod,
-            cache=cache,
-        )
+        if package_manager == "go":
+            upgrades = process_go_mod(
+                file_path,
+                repo_root,
+                package_manager,
+                include_dev=not args.no_dev,
+                include_prod=not args.no_prod,
+                cache=cache,
+            )
+        else:
+            upgrades = process_package_json(
+                file_path,
+                repo_root,
+                package_manager,
+                include_dev=not args.no_dev,
+                include_prod=not args.no_prod,
+                cache=cache,
+            )
         all_upgrades.extend(upgrades)
 
     # Save cache
