@@ -425,7 +425,7 @@ If you see "current version mismatch" warnings when applying, it means the packa
 
 ### Vendored Dependencies
 
-If your repository uses vendored dependencies (has a `vendor/` directory), the tool automatically handles this by using the `-mod=mod` flag when querying the Go module proxy. No additional configuration is needed - the tool will bypass the vendor directory to discover available versions.
+If your repository uses vendored dependencies (has a `vendor/` directory), the tool automatically handles this by using the `-mod=readonly` flag when querying the Go module proxy. No additional configuration is needed - the tool will bypass the vendor directory to discover available versions without modifying go.sum.
 
 ### Go command not found
 

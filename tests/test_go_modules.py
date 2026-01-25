@@ -71,7 +71,7 @@ class TestGetGoModuleVersions:
         assert "v1.2.1-0.20220228012449-10b1cf09e00b" not in result
 
     def test_get_go_module_versions_uses_mod_flag(self, temp_dir, mocker):
-        """Verify -mod=mod flag is used in go list -m -versions."""
+        """Verify -mod=readonly flag is used in go list -m -versions."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
         mock_run = mocker.patch("subprocess.run")
         mock_run.return_value.returncode = 0
@@ -79,30 +79,30 @@ class TestGetGoModuleVersions:
 
         get_go_module_versions("test-module", temp_dir, cache, require_incompatible=False)
 
-        # Verify the command includes -mod=mod
+        # Verify the command includes -mod=readonly
         mock_run.assert_called_once()
         call_args = mock_run.call_args[0][0]
         assert call_args[0] == "go"
         assert call_args[1] == "list"
         assert call_args[2] == "-m"
-        assert "-mod=mod" in call_args
+        assert "-mod=readonly" in call_args
         assert "-versions" in call_args
 
     def test_parse_go_mod_uses_mod_flag(self, temp_dir, mocker):
-        """Verify -mod=mod flag is used in go list -m -json all."""
+        """Verify -mod=readonly flag is used in go list -m -json all."""
         mock_run = mocker.patch("subprocess.run")
         mock_run.return_value.returncode = 0
         mock_run.return_value.stdout = '{"Path": "test-module", "Version": "v1.0.0"}\n'
 
         parse_go_mod(temp_dir)
 
-        # Verify the command includes -mod=mod
+        # Verify the command includes -mod=readonly
         mock_run.assert_called_once()
         call_args = mock_run.call_args[0][0]
         assert call_args[0] == "go"
         assert call_args[1] == "list"
         assert call_args[2] == "-m"
-        assert "-mod=mod" in call_args
+        assert "-mod=readonly" in call_args
         assert "-json" in call_args
         assert "all" in call_args
 
