@@ -314,7 +314,8 @@ class TestApplyUpgrades:
         mock_pm.regenerate_lock.return_value = (True, "")
         mock_pm.verify_build.return_value = (True, "")
         mocker.patch(
-            "go_patch_it.core.package_manager.get_package_manager_for_location", return_value=mock_pm
+            "go_patch_it.core.package_manager.get_package_manager_for_location",
+            return_value=mock_pm,
         )
 
         # Create backup file
@@ -359,7 +360,8 @@ class TestApplyUpgrades:
         mock_pm.regenerate_lock.return_value = (True, "")
         mock_pm.verify_build.return_value = (True, "")
         mocker.patch(
-            "go_patch_it.core.package_manager.get_package_manager_for_location", return_value=mock_pm
+            "go_patch_it.core.package_manager.get_package_manager_for_location",
+            return_value=mock_pm,
         )
 
         (temp_dir / "package.json.old").write_text(package_json.read_text())
@@ -877,7 +879,8 @@ class TestApplyUpgradesGoMod:
         mock_pm.regenerate_lock.return_value = (True, "")
         mock_pm.verify_build.return_value = (True, "")
         mocker.patch(
-            "go_patch_it.core.package_manager.get_package_manager_for_location", return_value=mock_pm
+            "go_patch_it.core.package_manager.get_package_manager_for_location",
+            return_value=mock_pm,
         )
 
         (temp_dir / "package.json.old").write_text(package_json.read_text())
@@ -1083,9 +1086,12 @@ class TestApplyUpgradesGoMod:
             }
         ]
 
-        mocker.patch("go_patch_it.core.files.backup_files", return_value={"package.json": backup_file})
         mocker.patch(
-            "go_patch_it.core.package_manager.detect_package_manager_for_location", return_value="npm"
+            "go_patch_it.core.files.backup_files", return_value={"package.json": backup_file}
+        )
+        mocker.patch(
+            "go_patch_it.core.package_manager.detect_package_manager_for_location",
+            return_value="npm",
         )
         mock_pm = mocker.Mock()
         mock_pm.name = "npm"
@@ -1148,7 +1154,8 @@ class TestApplyUpgradesDryRun:
         mock_pm.regenerate_lock = mocker.Mock()
         mock_pm.verify_build = mocker.Mock()
         mocker.patch(
-            "go_patch_it.core.package_manager.get_package_manager_for_location", return_value=mock_pm
+            "go_patch_it.core.package_manager.get_package_manager_for_location",
+            return_value=mock_pm,
         )
 
         # Call with dry_run=True

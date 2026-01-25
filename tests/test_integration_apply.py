@@ -40,7 +40,8 @@ class TestMainApply:
         mock_pm.regenerate_lock.return_value = (True, "")
         mock_pm.verify_build.return_value = (True, "")
         mocker.patch(
-            "go_patch_it.core.package_manager.get_package_manager_for_location", return_value=mock_pm
+            "go_patch_it.core.package_manager.get_package_manager_for_location",
+            return_value=mock_pm,
         )
 
         # Create backup file
@@ -151,7 +152,9 @@ class TestEdgeCasesApply:
             }
         ]
 
-        mocker.patch("go_patch_it.core.files.backup_files", side_effect=OSError("Permission denied"))
+        mocker.patch(
+            "go_patch_it.core.files.backup_files", side_effect=OSError("Permission denied")
+        )
 
         apply_upgrades(temp_dir, upgrades, create_backups=False)
         captured = capsys.readouterr()
@@ -184,7 +187,8 @@ class TestDryRun:
         mock_pm.regenerate_lock = mocker.Mock()
         mock_pm.verify_build = mocker.Mock()
         mocker.patch(
-            "go_patch_it.core.package_manager.get_package_manager_for_location", return_value=mock_pm
+            "go_patch_it.core.package_manager.get_package_manager_for_location",
+            return_value=mock_pm,
         )
         mock_regen = mock_pm.regenerate_lock
         mock_verify = mock_pm.verify_build
@@ -237,7 +241,8 @@ class TestDryRun:
         mock_pm.regenerate_lock = mocker.Mock(return_value=(True, ""))
         mock_pm.verify_build = mocker.Mock(return_value=(True, ""))
         mocker.patch(
-            "go_patch_it.core.package_manager.get_package_manager_for_location", return_value=mock_pm
+            "go_patch_it.core.package_manager.get_package_manager_for_location",
+            return_value=mock_pm,
         )
         mock_update = mock_pm.update_file
         mock_tidy = mock_pm.regenerate_lock

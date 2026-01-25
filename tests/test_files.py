@@ -394,7 +394,9 @@ class TestRestoreAllBackups:
         package_json_old.write_text('{"name": "test"}')
 
         # Mock restore_files to raise an exception
-        mocker.patch("go_patch_it.core.files.restore_files", side_effect=OSError("Permission denied"))
+        mocker.patch(
+            "go_patch_it.core.files.restore_files", side_effect=OSError("Permission denied")
+        )
 
         # Should handle exception and continue
         result = restore_all_backups(temp_dir)
