@@ -46,10 +46,12 @@ class TestMainApply:
             "bugfix_bumper.files.backup_files",
             return_value={"package.json": temp_dir / "package.json.old"},
         )
-        mocker.patch("bugfix_bumper.npm_yarn.regenerate_lock_file", return_value=(True, ""))
-        mocker.patch("bugfix_bumper.npm_yarn.verify_build", return_value=(True, ""))
+        mock_pm = mocker.Mock()
+        mock_pm.name = "npm"
+        mock_pm.regenerate_lock.return_value = (True, "")
+        mock_pm.verify_build.return_value = (True, "")
         mocker.patch(
-            "bugfix_bumper.package_manager.detect_package_manager_for_location", return_value="npm"
+            "bugfix_bumper.package_manager.get_package_manager_for_location", return_value=mock_pm
         )
 
         # Create backup file
@@ -188,8 +190,15 @@ class TestDryRun:
 
         # Mock functions that should NOT be called in dry-run
         mock_backup = mocker.patch("bugfix_bumper.files.backup_files")
-        mock_regen = mocker.patch("bugfix_bumper.npm_yarn.regenerate_lock_file")
-        mock_verify = mocker.patch("bugfix_bumper.npm_yarn.verify_build")
+        mock_pm = mocker.Mock()
+        mock_pm.name = "npm"
+        mock_pm.regenerate_lock = mocker.Mock()
+        mock_pm.verify_build = mocker.Mock()
+        mocker.patch(
+            "bugfix_bumper.package_manager.get_package_manager_for_location", return_value=mock_pm
+        )
+        mock_regen = mock_pm.regenerate_lock
+        mock_verify = mock_pm.verify_build
 
         from bugfix_bumper.processing import apply_upgrades
 
@@ -233,9 +242,17 @@ class TestDryRun:
 
         # Mock functions that should NOT be called in dry-run
         mock_backup = mocker.patch("bugfix_bumper.files.backup_files")
-        mock_update = mocker.patch("bugfix_bumper.go_modules.update_go_mod_versions")
-        mock_tidy = mocker.patch("bugfix_bumper.go_modules.regenerate_go_sum")
-        mock_verify = mocker.patch("bugfix_bumper.go_modules.verify_go_build")
+        mock_pm = mocker.Mock()
+        mock_pm.name = "go"
+        mock_pm.update_file = mocker.Mock(return_value=(True, ""))
+        mock_pm.regenerate_lock = mocker.Mock(return_value=(True, ""))
+        mock_pm.verify_build = mocker.Mock(return_value=(True, ""))
+        mocker.patch(
+            "bugfix_bumper.package_manager.get_package_manager_for_location", return_value=mock_pm
+        )
+        mock_update = mock_pm.update_file
+        mock_tidy = mock_pm.regenerate_lock
+        mock_verify = mock_pm.verify_build
 
         from bugfix_bumper.processing import apply_upgrades
 

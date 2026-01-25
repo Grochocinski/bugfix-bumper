@@ -6,11 +6,10 @@ from bugfix_bumper.files import (
     backup_files,
     cleanup_backups,
     find_backup_files,
-    find_go_mod_files,
-    find_package_json_files,
     restore_all_backups,
     restore_files,
 )
+from bugfix_bumper.managers import GoPackageManager, NpmPackageManager
 
 
 class TestFindPackageJsonFiles:
@@ -23,7 +22,8 @@ class TestFindPackageJsonFiles:
         with open(package_json, "w") as f:
             json.dump(sample_package_json, f)
 
-        result = find_package_json_files(temp_dir)
+        pm = NpmPackageManager()
+        result = pm.find_files(temp_dir)
         assert len(result) == 1
         assert result[0] == package_json
 
@@ -54,7 +54,8 @@ class TestFindPackageJsonFiles:
             with open(pkg_json, "w") as f:
                 json.dump({"name": "test"}, f)
 
-        result = find_package_json_files(temp_dir)
+        pm = NpmPackageManager()
+        result = pm.find_files(temp_dir)
         assert len(result) == 4  # root + 3 workspaces
         assert package_json in result
         assert pkg1_json in result
@@ -69,7 +70,8 @@ class TestFindPackageJsonFiles:
             json.dump(sample_package_json_with_workspaces, f)
 
         # Don't create workspace package.json files
-        result = find_package_json_files(temp_dir)
+        pm = NpmPackageManager()
+        result = pm.find_files(temp_dir)
         assert len(result) == 1  # Only root
         assert result[0] == package_json
 
@@ -79,7 +81,8 @@ class TestFindPackageJsonFiles:
         with open(package_json, "w") as f:
             f.write("invalid json{")
 
-        result = find_package_json_files(temp_dir)
+        pm = NpmPackageManager()
+        result = pm.find_files(temp_dir)
         assert result == [package_json]  # Still returns root path
 
     def test_no_workspaces_key(self, temp_dir, sample_package_json):
@@ -89,7 +92,8 @@ class TestFindPackageJsonFiles:
         with open(package_json, "w") as f:
             json.dump(sample_package_json, f)
 
-        result = find_package_json_files(temp_dir)
+        pm = NpmPackageManager()
+        result = pm.find_files(temp_dir)
         assert len(result) == 1
         assert result[0] == package_json
 
@@ -100,7 +104,8 @@ class TestFindPackageJsonFiles:
         with open(package_json, "w") as f:
             json.dump({"workspaces": []}, f)
 
-        result = find_package_json_files(temp_dir)
+        pm = NpmPackageManager()
+        result = pm.find_files(temp_dir)
         assert len(result) == 1
         assert result[0] == package_json
 
@@ -115,7 +120,8 @@ class TestFindPackageJsonFiles:
             '{"name": "nested"}'
         )
 
-        result = find_package_json_files(temp_dir)
+        pm = NpmPackageManager()
+        result = pm.find_files(temp_dir)
         # Should only find root, not the one in node_modules
         assert len(result) == 1
         assert result[0] == package_json
@@ -138,7 +144,8 @@ class TestFindPackageJsonFiles:
         pkg1_json = pkg1_dir / "package.json"
         pkg1_json.write_text('{"name": "pkg1"}')
 
-        result = find_package_json_files(temp_dir)
+        pm = NpmPackageManager()
+        result = pm.find_files(temp_dir)
         # Should find root and workspace, but each only once
         assert len(result) == 2
         assert package_json in result
@@ -455,7 +462,8 @@ class TestFindGoModFiles:
         go_mod = temp_dir / "go.mod"
         go_mod.write_text("module test\n\ngo 1.21\n")
 
-        result = find_go_mod_files(temp_dir)
+        pm = GoPackageManager()
+        result = pm.find_files(temp_dir)
         assert len(result) == 1
         assert result[0] == go_mod
 
@@ -469,7 +477,8 @@ class TestFindGoModFiles:
         subdir_go_mod = subdir / "go.mod"
         subdir_go_mod.write_text("module test/subdir\n\ngo 1.21\n")
 
-        result = find_go_mod_files(temp_dir)
+        pm = GoPackageManager()
+        result = pm.find_files(temp_dir)
         assert len(result) == 2
         assert root_go_mod in result
         assert subdir_go_mod in result
@@ -484,7 +493,8 @@ class TestFindGoModFiles:
         vendor_go_mod = vendor_dir / "go.mod"
         vendor_go_mod.write_text("module vendor/test\n\ngo 1.21\n")
 
-        result = find_go_mod_files(temp_dir)
+        pm = GoPackageManager()
+        result = pm.find_files(temp_dir)
         assert len(result) == 1
         assert root_go_mod in result
         assert vendor_go_mod not in result
@@ -499,14 +509,16 @@ class TestFindGoModFiles:
         nm_go_mod = node_modules_dir / "go.mod"
         nm_go_mod.write_text("module nm/test\n\ngo 1.21\n")
 
-        result = find_go_mod_files(temp_dir)
+        pm = GoPackageManager()
+        result = pm.find_files(temp_dir)
         assert len(result) == 1
         assert root_go_mod in result
         assert nm_go_mod not in result
 
     def test_no_go_mod_files(self, temp_dir):
         """No go.mod files found."""
-        result = find_go_mod_files(temp_dir)
+        pm = GoPackageManager()
+        result = pm.find_files(temp_dir)
         assert result == []
 
 

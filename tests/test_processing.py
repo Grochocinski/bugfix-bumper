@@ -3,12 +3,8 @@
 import json
 
 from bugfix_bumper.cache import PackageCache
-from bugfix_bumper.processing import (
-    apply_upgrades,
-    process_dependency,
-    process_go_mod,
-    process_package_json,
-)
+from bugfix_bumper.managers import GoPackageManager, YarnPackageManager
+from bugfix_bumper.processing import apply_upgrades, process_file
 
 
 class TestProcessDependency:
@@ -17,14 +13,13 @@ class TestProcessDependency:
     def test_valid_upgrade_available(self, temp_dir, mocker):
         """Valid upgrade available (returns upgrade dict)."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mocker.patch("bugfix_bumper.version.find_latest_patch", return_value="1.2.5")
-        mocker.patch(
-            "bugfix_bumper.npm_yarn.get_package_versions",
-            return_value=["1.2.0", "1.2.1", "1.2.2", "1.2.3", "1.2.5"],
+        pm = YarnPackageManager()
+        mocker.patch.object(
+            pm, "get_versions", return_value=["1.2.0", "1.2.1", "1.2.2", "1.2.3", "1.2.5"]
         )
 
-        result = process_dependency(
-            "test-package", "^1.2.3", "dependencies", "package.json", "yarn", temp_dir, cache
+        result = pm.process_dependency(
+            "test-package", "^1.2.3", "dependencies", "package.json", temp_dir, cache
         )
         assert result is not None
         assert result["package"] == "test-package"
@@ -36,34 +31,35 @@ class TestProcessDependency:
     def test_no_upgrade_available(self, temp_dir, mocker):
         """No upgrade available (current is latest)."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mocker.patch("bugfix_bumper.version.find_latest_patch", return_value="1.2.3")
         mocker.patch(
-            "bugfix_bumper.npm_yarn.get_package_versions",
+            "bugfix_bumper.managers.npm_yarn.YarnPackageManager.get_versions",
             return_value=["1.2.0", "1.2.1", "1.2.2", "1.2.3"],
         )
 
-        result = process_dependency(
-            "test-package", "^1.2.3", "dependencies", "package.json", "yarn", temp_dir, cache
+        pm = YarnPackageManager()
+        result = pm.process_dependency(
+            "test-package", "^1.2.3", "dependencies", "package.json", temp_dir, cache
         )
         assert result is None  # No upgrade available
 
     def test_workspace_dependency(self, temp_dir):
         """Workspace dependency (`*`) → None."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        result = process_dependency(
-            "workspace-pkg", "*", "dependencies", "package.json", "yarn", temp_dir, cache
+        pm = YarnPackageManager()
+        result = pm.process_dependency(
+            "workspace-pkg", "*", "dependencies", "package.json", temp_dir, cache
         )
         assert result is None
 
     def test_git_url(self, temp_dir):
         """Git URL → None."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        result = process_dependency(
+        pm = YarnPackageManager()
+        result = pm.process_dependency(
             "test-package",
             "git+https://github.com/user/repo.git",
             "dependencies",
             "package.json",
-            "yarn",
             temp_dir,
             cache,
         )
@@ -72,12 +68,12 @@ class TestProcessDependency:
     def test_file_path(self, temp_dir):
         """File path → None."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        result = process_dependency(
+        pm = YarnPackageManager()
+        result = pm.process_dependency(
             "test-package",
             "./local-package",
             "dependencies",
             "package.json",
-            "yarn",
             temp_dir,
             cache,
         )
@@ -86,50 +82,50 @@ class TestProcessDependency:
     def test_invalid_version_format(self, temp_dir):
         """Invalid version format → None."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        result = process_dependency(
-            "test-package", "invalid", "dependencies", "package.json", "yarn", temp_dir, cache
+        pm = YarnPackageManager()
+        result = pm.process_dependency(
+            "test-package", "invalid", "dependencies", "package.json", temp_dir, cache
         )
         assert result is None
 
     def test_preserves_range_prefix_caret(self, temp_dir, mocker):
         """Preserves range prefix (^)."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mocker.patch("bugfix_bumper.version.find_latest_patch", return_value="1.2.5")
         mocker.patch(
-            "bugfix_bumper.npm_yarn.get_package_versions",
+            "bugfix_bumper.managers.npm_yarn.YarnPackageManager.get_versions",
             return_value=["1.2.0", "1.2.1", "1.2.2", "1.2.3", "1.2.5"],
         )
 
-        result = process_dependency(
-            "test-package", "^1.2.3", "dependencies", "package.json", "yarn", temp_dir, cache
+        pm = YarnPackageManager()
+        result = pm.process_dependency(
+            "test-package", "^1.2.3", "dependencies", "package.json", temp_dir, cache
         )
         assert result["proposed"] == "^1.2.5"
 
     def test_preserves_range_prefix_tilde(self, temp_dir, mocker):
         """Preserves range prefix (~)."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mocker.patch("bugfix_bumper.version.find_latest_patch", return_value="1.2.5")
         mocker.patch(
-            "bugfix_bumper.npm_yarn.get_package_versions",
+            "bugfix_bumper.managers.npm_yarn.YarnPackageManager.get_versions",
             return_value=["1.2.0", "1.2.1", "1.2.2", "1.2.3", "1.2.5"],
         )
 
-        result = process_dependency(
-            "test-package", "~1.2.3", "dependencies", "package.json", "yarn", temp_dir, cache
+        pm = YarnPackageManager()
+        result = pm.process_dependency(
+            "test-package", "~1.2.3", "dependencies", "package.json", temp_dir, cache
         )
         assert result["proposed"] == "~1.2.5"
 
     def test_exact_version_stays_exact(self, temp_dir, mocker):
         """Exact version stays exact."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mocker.patch("bugfix_bumper.version.find_latest_patch", return_value="1.2.5")
-        mocker.patch(
-            "bugfix_bumper.npm_yarn.get_package_versions",
-            return_value=["1.2.0", "1.2.1", "1.2.2", "1.2.3", "1.2.5"],
+        pm = YarnPackageManager()
+        mocker.patch.object(
+            pm, "get_versions", return_value=["1.2.0", "1.2.1", "1.2.2", "1.2.3", "1.2.5"]
         )
 
-        result = process_dependency(
-            "test-package", "1.2.3", "dependencies", "package.json", "yarn", temp_dir, cache
+        result = pm.process_dependency(
+            "test-package", "1.2.3", "dependencies", "package.json", temp_dir, cache
         )
         assert result["proposed"] == "1.2.5"  # No prefix
 
@@ -137,50 +133,58 @@ class TestProcessDependency:
         """Skip special tags (latest, next, beta, alpha, rc)."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
 
+        pm = YarnPackageManager()
         for tag in ["latest", "next", "beta", "alpha", "rc"]:
-            result = process_dependency(
-                "test-package", tag, "dependencies", "package.json", "yarn", temp_dir, cache
+            result = pm.process_dependency(
+                "test-package", tag, "dependencies", "package.json", temp_dir, cache
             )
             assert result is None
 
     def test_process_dependency_version_without_patch(self, temp_dir, mocker):
         """Handle version without patch number (e.g., '1.2' → patch 0)."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mocker.patch("bugfix_bumper.version.find_latest_patch", return_value="1.2.5")
         mocker.patch(
-            "bugfix_bumper.npm_yarn.get_package_versions", return_value=["1.2.0", "1.2.1", "1.2.5"]
+            "bugfix_bumper.managers.npm_yarn.YarnPackageManager.get_versions",
+            return_value=["1.2.0", "1.2.1", "1.2.5"],
         )
 
-        result = process_dependency(
-            "test-package", "1.2", "dependencies", "package.json", "yarn", temp_dir, cache
+        pm = YarnPackageManager()
+        result = pm.process_dependency(
+            "test-package", "1.2", "dependencies", "package.json", temp_dir, cache
         )
         assert result is not None
         assert result["currentPatch"] == 0
         assert result["proposedPatch"] == 5
 
-    def test_process_dependency_async_package_debug(self, temp_dir, mocker, capsys):
-        """Debug logging for async package when latest patch not found."""
+    def test_process_dependency_async_package_debug(self, temp_dir, mocker):
+        """No upgrade when latest patch not found (no debug message for specific packages)."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mocker.patch("bugfix_bumper.version.find_latest_patch", return_value=None)
-        mocker.patch("bugfix_bumper.npm_yarn.get_package_versions", return_value=[])
+        mocker.patch(
+            "bugfix_bumper.managers.npm_yarn.YarnPackageManager.get_versions", return_value=[]
+        )
 
-        result = process_dependency(
-            "async", "1.2.3", "dependencies", "package.json", "yarn", temp_dir, cache
+        pm = YarnPackageManager()
+        result = pm.process_dependency(
+            "async", "1.2.3", "dependencies", "package.json", temp_dir, cache
         )
         assert result is None
 
-        captured = capsys.readouterr()
-        assert "DEBUG" in captured.err
-        assert "async" in captured.err
+        # No specific debug message for async package in new implementation
+        # (debug messages are only for major_minor extraction failures)
+        # Should complete without error
 
     def test_process_dependency_latest_patch_match_fails(self, temp_dir, mocker):
         """Return None when latest_patch_match fails (invalid version format)."""
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        # Return a version that doesn't match the expected pattern
-        mocker.patch("bugfix_bumper.version.find_latest_patch", return_value="invalid-version")
+        # Return versions that will result in invalid format after filtering
+        mocker.patch(
+            "bugfix_bumper.managers.npm_yarn.YarnPackageManager.get_versions",
+            return_value=["invalid-version"],
+        )
 
-        result = process_dependency(
-            "test-package", "1.2.3", "dependencies", "package.json", "yarn", temp_dir, cache
+        pm = YarnPackageManager()
+        result = pm.process_dependency(
+            "test-package", "1.2.3", "dependencies", "package.json", temp_dir, cache
         )
         assert result is None
 
@@ -196,13 +200,15 @@ class TestProcessPackageJson:
             json.dump(sample_package_json, f)
 
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mocker.patch(
-            "bugfix_bumper.processing.process_dependency",
+        pm = YarnPackageManager()
+        mocker.patch.object(
+            pm,
+            "process_dependency",
             return_value={"package": "express", "current": "^4.18.1", "proposed": "^4.18.3"},
         )
 
-        result = process_package_json(
-            package_json, temp_dir, "yarn", include_dev=False, include_prod=True, cache=cache
+        result = process_file(
+            package_json, temp_dir, pm, include_dev=False, include_prod=True, cache=cache
         )
         # Should only process dependencies, not devDependencies
         assert len(result) == 2  # express and lodash
@@ -215,13 +221,15 @@ class TestProcessPackageJson:
             json.dump(sample_package_json, f)
 
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mocker.patch(
-            "bugfix_bumper.processing.process_dependency",
+        pm = YarnPackageManager()
+        mocker.patch.object(
+            pm,
+            "process_dependency",
             return_value={"package": "jest", "current": "^29.0.0", "proposed": "^29.0.5"},
         )
 
-        result = process_package_json(
-            package_json, temp_dir, "yarn", include_dev=True, include_prod=False, cache=cache
+        result = process_file(
+            package_json, temp_dir, pm, include_dev=True, include_prod=False, cache=cache
         )
         # Should only process devDependencies
         assert len(result) == 2  # jest and typescript
@@ -234,13 +242,15 @@ class TestProcessPackageJson:
             json.dump(sample_package_json, f)
 
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mocker.patch(
-            "bugfix_bumper.processing.process_dependency",
+        pm = YarnPackageManager()
+        mocker.patch.object(
+            pm,
+            "process_dependency",
             return_value={"package": "test", "current": "1.0.0", "proposed": "1.0.1"},
         )
 
-        result = process_package_json(
-            package_json, temp_dir, "yarn", include_dev=True, include_prod=True, cache=cache
+        result = process_file(
+            package_json, temp_dir, pm, include_dev=True, include_prod=True, cache=cache
         )
         assert len(result) == 4  # 2 deps + 2 devDeps
 
@@ -248,7 +258,8 @@ class TestProcessPackageJson:
         """File doesn't exist (returns empty list)."""
         package_json = temp_dir / "nonexistent.json"
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        result = process_package_json(package_json, temp_dir, "yarn", True, True, cache)
+        pm = YarnPackageManager()
+        result = process_file(package_json, temp_dir, pm, True, True, cache)
         assert result == []
 
     def test_invalid_json(self, temp_dir):
@@ -258,7 +269,8 @@ class TestProcessPackageJson:
             f.write("invalid json{")
 
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        result = process_package_json(package_json, temp_dir, "yarn", True, True, cache)
+        pm = YarnPackageManager()
+        result = process_file(package_json, temp_dir, pm, True, True, cache)
         assert result == []
 
     def test_empty_dependencies(self, temp_dir):
@@ -269,7 +281,8 @@ class TestProcessPackageJson:
             json.dump({"name": "test", "dependencies": {}, "devDependencies": {}}, f)
 
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        result = process_package_json(package_json, temp_dir, "yarn", True, True, cache)
+        pm = YarnPackageManager()
+        result = process_file(package_json, temp_dir, pm, True, True, cache)
         assert result == []
 
 
@@ -296,10 +309,12 @@ class TestApplyUpgrades:
             "bugfix_bumper.files.backup_files",
             return_value={"package.json": temp_dir / "package.json.old"},
         )
-        mocker.patch("bugfix_bumper.npm_yarn.regenerate_lock_file", return_value=(True, ""))
-        mocker.patch("bugfix_bumper.npm_yarn.verify_build", return_value=(True, ""))
+        mock_pm = mocker.Mock()
+        mock_pm.name = "npm"
+        mock_pm.regenerate_lock.return_value = (True, "")
+        mock_pm.verify_build.return_value = (True, "")
         mocker.patch(
-            "bugfix_bumper.package_manager.detect_package_manager_for_location", return_value="npm"
+            "bugfix_bumper.package_manager.get_package_manager_for_location", return_value=mock_pm
         )
 
         # Create backup file
@@ -339,10 +354,12 @@ class TestApplyUpgrades:
             "bugfix_bumper.files.backup_files",
             return_value={"package.json": temp_dir / "package.json.old"},
         )
-        mocker.patch("bugfix_bumper.npm_yarn.regenerate_lock_file", return_value=(True, ""))
-        mocker.patch("bugfix_bumper.npm_yarn.verify_build", return_value=(True, ""))
+        mock_pm = mocker.Mock()
+        mock_pm.name = "npm"
+        mock_pm.regenerate_lock.return_value = (True, "")
+        mock_pm.verify_build.return_value = (True, "")
         mocker.patch(
-            "bugfix_bumper.package_manager.detect_package_manager_for_location", return_value="npm"
+            "bugfix_bumper.package_manager.get_package_manager_for_location", return_value=mock_pm
         )
 
         (temp_dir / "package.json.old").write_text(package_json.read_text())
@@ -363,7 +380,8 @@ class TestProcessGoMod:
         go_mod.write_text("module test\n\ngo 1.21\n")
 
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=False)
-        result = process_go_mod(go_mod, temp_dir, "go", True, True, cache)
+        pm = GoPackageManager()
+        result = process_file(go_mod, temp_dir, pm, True, True, cache)
 
         assert result == []
 
@@ -372,20 +390,21 @@ class TestProcessGoMod:
         go_mod = temp_dir / "go.mod"
         go_mod.write_text("module test\n\ngo 1.21\n\nrequire github.com/gin-gonic/gin v1.9.1\n")
 
-        # Mock parse_go_mod to return module data
-        mock_parse = mocker.patch("bugfix_bumper.processing.parse_go_mod")
+        # Mock GoPackageManager.parse_file to return module data
+        mock_parse = mocker.patch("bugfix_bumper.managers.go.GoPackageManager.parse_file")
         mock_parse.return_value = {
             "modules": [
                 {"Path": "github.com/gin-gonic/gin", "Version": "v1.9.1", "Indirect": False}
             ]
         }
 
-        # Mock get_go_module_versions
-        mock_get_versions = mocker.patch("bugfix_bumper.go_modules.get_go_module_versions")
+        # Mock get_versions
+        mock_get_versions = mocker.patch("bugfix_bumper.managers.go.GoPackageManager.get_versions")
         mock_get_versions.return_value = ["v1.9.1", "v1.9.2"]
 
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=False)
-        result = process_go_mod(go_mod, temp_dir, "go", True, True, cache)
+        pm = GoPackageManager()
+        result = process_file(go_mod, temp_dir, pm, True, True, cache)
 
         # Should find upgrade from v1.9.1 to v1.9.2
         assert len(result) == 1
@@ -401,7 +420,7 @@ class TestProcessGoMod:
         )
 
         # Mock parse_go_mod
-        mock_parse = mocker.patch("bugfix_bumper.processing.parse_go_mod")
+        mock_parse = mocker.patch("bugfix_bumper.managers.go.GoPackageManager.parse_file")
         mock_parse.return_value = {
             "modules": [
                 {"Path": "github.com/gin-gonic/gin", "Version": "v1.9.1", "Indirect": False},
@@ -409,12 +428,13 @@ class TestProcessGoMod:
             ]
         }
 
-        # Mock get_go_module_versions
-        mock_get_versions = mocker.patch("bugfix_bumper.go_modules.get_go_module_versions")
+        # Mock get_versions
+        mock_get_versions = mocker.patch("bugfix_bumper.managers.go.GoPackageManager.get_versions")
         mock_get_versions.return_value = ["v1.9.1", "v1.9.2"]
 
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=False)
-        result = process_go_mod(go_mod, temp_dir, "go", True, True, cache)
+        pm = GoPackageManager()
+        result = process_file(go_mod, temp_dir, pm, True, True, cache)
 
         # Should only process direct dependency
         assert len(result) == 1
@@ -429,7 +449,7 @@ class TestProcessGoMod:
         )
 
         # Mock parse_go_mod
-        mock_parse = mocker.patch("bugfix_bumper.processing.parse_go_mod")
+        mock_parse = mocker.patch("bugfix_bumper.managers.go.GoPackageManager.parse_file")
         mock_parse.return_value = {
             "modules": [
                 {
@@ -441,7 +461,8 @@ class TestProcessGoMod:
         }
 
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=False)
-        result = process_go_mod(go_mod, temp_dir, "go", True, True, cache)
+        pm = GoPackageManager()
+        result = process_file(go_mod, temp_dir, pm, True, True, cache)
 
         # Should skip replaced dependency
         assert len(result) == 0
@@ -454,7 +475,7 @@ class TestProcessGoMod:
         )
 
         # Mock parse_go_mod
-        mock_parse = mocker.patch("bugfix_bumper.processing.parse_go_mod")
+        mock_parse = mocker.patch("bugfix_bumper.managers.go.GoPackageManager.parse_file")
         mock_parse.return_value = {
             "modules": [
                 {
@@ -466,7 +487,8 @@ class TestProcessGoMod:
         }
 
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=False)
-        result = process_go_mod(go_mod, temp_dir, "go", True, True, cache)
+        pm = GoPackageManager()
+        result = process_file(go_mod, temp_dir, pm, True, True, cache)
 
         # Should skip pseudo-version
         assert len(result) == 0
@@ -479,7 +501,7 @@ class TestProcessGoMod:
         )
 
         # Mock parse_go_mod
-        mock_parse = mocker.patch("bugfix_bumper.processing.parse_go_mod")
+        mock_parse = mocker.patch("bugfix_bumper.managers.go.GoPackageManager.parse_file")
         mock_parse.return_value = {
             "modules": [
                 {
@@ -491,7 +513,8 @@ class TestProcessGoMod:
         }
 
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=False)
-        result = process_go_mod(go_mod, temp_dir, "go", True, True, cache)
+        pm = GoPackageManager()
+        result = process_file(go_mod, temp_dir, pm, True, True, cache)
 
         # Should skip pseudo-version
         assert len(result) == 0
@@ -507,7 +530,7 @@ class TestProcessGoMod:
         )
 
         # Mock parse_go_mod
-        mock_parse = mocker.patch("bugfix_bumper.processing.parse_go_mod")
+        mock_parse = mocker.patch("bugfix_bumper.managers.go.GoPackageManager.parse_file")
         mock_parse.return_value = {
             "modules": [
                 {
@@ -519,7 +542,8 @@ class TestProcessGoMod:
         }
 
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=False)
-        result = process_go_mod(go_mod, temp_dir, "go", True, True, cache)
+        pm = GoPackageManager()
+        result = process_file(go_mod, temp_dir, pm, True, True, cache)
 
         # Should skip pseudo-version (though this format may not be common, test the regex handles it)
         # Note: The regex may not catch this exact format, but we test that it doesn't crash
@@ -533,7 +557,7 @@ class TestProcessGoMod:
         )
 
         # Mock parse_go_mod
-        mock_parse = mocker.patch("bugfix_bumper.processing.parse_go_mod")
+        mock_parse = mocker.patch("bugfix_bumper.managers.go.GoPackageManager.parse_file")
         mock_parse.return_value = {
             "modules": [
                 {
@@ -544,15 +568,16 @@ class TestProcessGoMod:
             ]
         }
 
-        # Mock get_go_module_versions to return +incompatible versions
-        mock_get_versions = mocker.patch("bugfix_bumper.go_modules.get_go_module_versions")
+        # Mock get_versions to return +incompatible versions
+        mock_get_versions = mocker.patch("bugfix_bumper.managers.go.GoPackageManager.get_versions")
         mock_get_versions.return_value = [
             "v3.5.1+incompatible",
             "v3.5.2+incompatible",
         ]
 
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=False)
-        result = process_go_mod(go_mod, temp_dir, "go", True, True, cache)
+        pm = GoPackageManager()
+        result = process_file(go_mod, temp_dir, pm, True, True, cache)
 
         # Should find upgrade preserving +incompatible
         assert len(result) == 1
@@ -568,15 +593,16 @@ class TestProcessGoMod:
         )
 
         # Mock parse_go_mod to return None (simulating failure)
-        mock_parse = mocker.patch("bugfix_bumper.processing.parse_go_mod")
+        mock_parse = mocker.patch("bugfix_bumper.managers.go.GoPackageManager.parse_file")
         mock_parse.return_value = None
 
-        # Mock get_go_module_versions
-        mock_get_versions = mocker.patch("bugfix_bumper.go_modules.get_go_module_versions")
+        # Mock get_versions
+        mock_get_versions = mocker.patch("bugfix_bumper.managers.go.GoPackageManager.get_versions")
         mock_get_versions.return_value = ["v1.9.1", "v1.9.2"]
 
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=False)
-        result = process_go_mod(go_mod, temp_dir, "go", True, True, cache)
+        pm = GoPackageManager()
+        result = process_file(go_mod, temp_dir, pm, True, True, cache)
 
         # Should use fallback regex parsing
         assert len(result) == 1
@@ -588,14 +614,15 @@ class TestProcessGoMod:
         go_mod.write_text("module test\n\ngo 1.21\n")
 
         # Mock parse_go_mod to return None
-        mock_parse = mocker.patch("bugfix_bumper.processing.parse_go_mod")
+        mock_parse = mocker.patch("bugfix_bumper.managers.go.GoPackageManager.parse_file")
         mock_parse.return_value = None
 
         # Mock open to raise OSError
         mocker.patch("builtins.open", side_effect=OSError("Permission denied"))
 
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=False)
-        result = process_go_mod(go_mod, temp_dir, "go", True, True, cache)
+        pm = GoPackageManager()
+        result = process_file(go_mod, temp_dir, pm, True, True, cache)
 
         # Should return empty list on error
         assert result == []
@@ -608,13 +635,14 @@ class TestProcessGoMod:
         )
 
         # Mock parse_go_mod
-        mock_parse = mocker.patch("bugfix_bumper.processing.parse_go_mod")
+        mock_parse = mocker.patch("bugfix_bumper.managers.go.GoPackageManager.parse_file")
         mock_parse.return_value = {
             "modules": [{"Path": "github.com/old/module", "Version": "v1.0.0", "Indirect": False}]
         }
 
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=False)
-        result = process_go_mod(go_mod, temp_dir, "go", True, True, cache)
+        pm = GoPackageManager()
+        result = process_file(go_mod, temp_dir, pm, True, True, cache)
 
         # Should skip excluded dependency
         assert len(result) == 0
@@ -625,13 +653,14 @@ class TestProcessGoMod:
         go_mod.write_text("module test\n\ngo 1.21\n")
 
         # Mock parse_go_mod to return module with no version
-        mock_parse = mocker.patch("bugfix_bumper.processing.parse_go_mod")
+        mock_parse = mocker.patch("bugfix_bumper.managers.go.GoPackageManager.parse_file")
         mock_parse.return_value = {
             "modules": [{"Path": "github.com/test/module", "Version": "", "Indirect": False}]
         }
 
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=False)
-        result = process_go_mod(go_mod, temp_dir, "go", True, True, cache)
+        pm = GoPackageManager()
+        result = process_file(go_mod, temp_dir, pm, True, True, cache)
 
         # Should skip module with no version
         assert len(result) == 0
@@ -666,9 +695,15 @@ class TestApplyUpgradesGoMod:
         (temp_dir / "go.sum.old").write_text(go_sum.read_text())
 
         # Mock Go commands
-        mocker.patch("bugfix_bumper.processing.update_go_mod_versions", return_value=(True, ""))
-        mocker.patch("bugfix_bumper.processing.regenerate_go_sum", return_value=(True, ""))
-        mocker.patch("bugfix_bumper.processing.verify_go_build", return_value=(True, ""))
+        mocker.patch(
+            "bugfix_bumper.managers.go.GoPackageManager.update_file", return_value=(True, "")
+        )
+        mocker.patch(
+            "bugfix_bumper.managers.go.GoPackageManager.regenerate_lock", return_value=(True, "")
+        )
+        mocker.patch(
+            "bugfix_bumper.managers.go.GoPackageManager.verify_build", return_value=(True, "")
+        )
 
         apply_upgrades(temp_dir, upgrades, create_backups=False)
 
@@ -711,7 +746,7 @@ class TestApplyUpgradesGoMod:
 
         # Mock update to fail
         mocker.patch(
-            "bugfix_bumper.processing.update_go_mod_versions",
+            "bugfix_bumper.managers.go.GoPackageManager.update_file",
             return_value=(False, "error: invalid module"),
         )
 
@@ -739,9 +774,11 @@ class TestApplyUpgradesGoMod:
         (temp_dir / "go.mod.old").write_text(go_mod.read_text())
 
         # Mock update to succeed, tidy to fail
-        mocker.patch("bugfix_bumper.processing.update_go_mod_versions", return_value=(True, ""))
         mocker.patch(
-            "bugfix_bumper.processing.regenerate_go_sum",
+            "bugfix_bumper.managers.go.GoPackageManager.update_file", return_value=(True, "")
+        )
+        mocker.patch(
+            "bugfix_bumper.managers.go.GoPackageManager.regenerate_lock",
             return_value=(False, "error: cannot find module"),
         )
 
@@ -769,10 +806,14 @@ class TestApplyUpgradesGoMod:
         (temp_dir / "go.mod.old").write_text(go_mod.read_text())
 
         # Mock update and tidy to succeed, verify to fail
-        mocker.patch("bugfix_bumper.processing.update_go_mod_versions", return_value=(True, ""))
-        mocker.patch("bugfix_bumper.processing.regenerate_go_sum", return_value=(True, ""))
         mocker.patch(
-            "bugfix_bumper.processing.verify_go_build",
+            "bugfix_bumper.managers.go.GoPackageManager.update_file", return_value=(True, "")
+        )
+        mocker.patch(
+            "bugfix_bumper.managers.go.GoPackageManager.regenerate_lock", return_value=(True, "")
+        )
+        mocker.patch(
+            "bugfix_bumper.managers.go.GoPackageManager.verify_build",
             return_value=(False, "error: checksum mismatch"),
         )
 
@@ -831,10 +872,12 @@ class TestApplyUpgradesGoMod:
             "bugfix_bumper.files.backup_files",
             return_value={"package.json": temp_dir / "package.json.old"},
         )
-        mocker.patch("bugfix_bumper.npm_yarn.regenerate_lock_file", return_value=(True, ""))
-        mocker.patch("bugfix_bumper.npm_yarn.verify_build", return_value=(True, ""))
+        mock_pm = mocker.Mock()
+        mock_pm.name = "npm"
+        mock_pm.regenerate_lock.return_value = (True, "")
+        mock_pm.verify_build.return_value = (True, "")
         mocker.patch(
-            "bugfix_bumper.package_manager.detect_package_manager_for_location", return_value="npm"
+            "bugfix_bumper.package_manager.get_package_manager_for_location", return_value=mock_pm
         )
 
         (temp_dir / "package.json.old").write_text(package_json.read_text())
@@ -938,11 +981,14 @@ class TestApplyUpgradesGoMod:
             return original_open(*args, **kwargs)
 
         mocker.patch("builtins.open", side_effect=mock_open)
+        mock_pm = mocker.Mock()
+        mock_pm.name = "npm"
+        mock_pm.regenerate_lock.return_value = (True, "")
+        mock_pm.verify_build.return_value = (True, "")
         mocker.patch(
-            "bugfix_bumper.processing.detect_package_manager_for_location", return_value="npm"
+            "bugfix_bumper.package_manager.get_package_manager_for_location",
+            return_value=mock_pm,
         )
-        mocker.patch("bugfix_bumper.processing.regenerate_lock_file", return_value=(True, ""))
-        mocker.patch("bugfix_bumper.processing.verify_build", return_value=(True, ""))
 
         apply_upgrades(temp_dir, upgrades, create_backups=False)
 
@@ -968,12 +1014,13 @@ class TestApplyUpgradesGoMod:
         mocker.patch(
             "bugfix_bumper.processing.backup_files", return_value={"package.json": backup_file}
         )
+        mock_pm = mocker.Mock()
+        mock_pm.name = "npm"
+        mock_pm.regenerate_lock.return_value = (False, "npm install failed")
+        mock_pm.verify_build.return_value = (True, "")
         mocker.patch(
-            "bugfix_bumper.processing.detect_package_manager_for_location", return_value="npm"
-        )
-        mocker.patch(
-            "bugfix_bumper.processing.regenerate_lock_file",
-            return_value=(False, "npm install failed"),
+            "bugfix_bumper.processing.get_package_manager_for_location",
+            return_value=mock_pm,
         )
 
         apply_upgrades(temp_dir, upgrades, create_backups=False)
@@ -1002,11 +1049,14 @@ class TestApplyUpgradesGoMod:
         mocker.patch(
             "bugfix_bumper.processing.backup_files", return_value={"package.json": backup_file}
         )
+        mock_pm = mocker.Mock()
+        mock_pm.name = "npm"
+        mock_pm.regenerate_lock.return_value = (True, "")
+        mock_pm.verify_build.return_value = (False, "npm ci failed")
         mocker.patch(
-            "bugfix_bumper.processing.detect_package_manager_for_location", return_value="npm"
+            "bugfix_bumper.processing.get_package_manager_for_location",
+            return_value=mock_pm,
         )
-        mocker.patch("bugfix_bumper.processing.regenerate_lock_file", return_value=(True, ""))
-        mocker.patch("bugfix_bumper.processing.verify_build", return_value=(False, "npm ci failed"))
 
         apply_upgrades(temp_dir, upgrades, create_backups=False)
 
@@ -1037,8 +1087,13 @@ class TestApplyUpgradesGoMod:
         mocker.patch(
             "bugfix_bumper.package_manager.detect_package_manager_for_location", return_value="npm"
         )
-        mocker.patch("bugfix_bumper.npm_yarn.regenerate_lock_file", return_value=(True, ""))
-        mocker.patch("bugfix_bumper.npm_yarn.verify_build", return_value=(True, ""))
+        mock_pm = mocker.Mock()
+        mock_pm.name = "npm"
+        mock_pm.regenerate_lock.return_value = (True, "")
+        mock_pm.verify_build.return_value = (True, "")
+        mocker.patch(
+            "bugfix_bumper.processing.get_package_manager_for_location", return_value=mock_pm
+        )
 
         apply_upgrades(temp_dir, upgrades, create_backups=True)
 
@@ -1088,10 +1143,12 @@ class TestApplyUpgradesDryRun:
 
         # Mock functions that should NOT be called in dry-run
         mock_backup = mocker.patch("bugfix_bumper.files.backup_files")
-        mock_regen = mocker.patch("bugfix_bumper.npm_yarn.regenerate_lock_file")
-        mock_verify = mocker.patch("bugfix_bumper.npm_yarn.verify_build")
+        mock_pm = mocker.Mock()
+        mock_pm.name = "npm"
+        mock_pm.regenerate_lock = mocker.Mock()
+        mock_pm.verify_build = mocker.Mock()
         mocker.patch(
-            "bugfix_bumper.package_manager.detect_package_manager_for_location", return_value="npm"
+            "bugfix_bumper.package_manager.get_package_manager_for_location", return_value=mock_pm
         )
 
         # Call with dry_run=True
@@ -1105,8 +1162,8 @@ class TestApplyUpgradesDryRun:
 
         # Verify it skips file modifications in dry-run mode
         mock_backup.assert_not_called()
-        mock_regen.assert_not_called()
-        mock_verify.assert_not_called()
+        mock_pm.regenerate_lock.assert_not_called()
+        mock_pm.verify_build.assert_not_called()
 
         # Verify it still shows what would change
         captured = capsys.readouterr()

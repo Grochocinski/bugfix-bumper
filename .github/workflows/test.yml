@@ -41,7 +41,7 @@ jobs:
           uv run pytest --cov=bugfix_bumper --cov=tests --cov-report=term --cov-report=json --cov-report=xml -q
         continue-on-error: false
       
-      - name: Check bugfix_bumper/ coverage (90% required)
+      - name: Check bugfix_bumper/ coverage (90% overall, 80% per-file)
         run: |
           python3 << 'EOF'
           import json
@@ -53,24 +53,43 @@ jobs:
           # Calculate coverage for bugfix_bumper/ files only
           total_statements = 0
           total_covered = 0
+          files_below_threshold = []
           
           for file_path, file_data in data['files'].items():
               if 'bugfix_bumper/' in file_path:
-                  total_statements += file_data['summary']['num_statements']
-                  total_covered += file_data['summary']['covered_lines']
+                  statements = file_data['summary']['num_statements']
+                  covered = file_data['summary']['covered_lines']
+                  total_statements += statements
+                  total_covered += covered
+                  
+                  # Check per-file coverage (80% minimum)
+                  if statements > 0:
+                      file_coverage = (covered / statements) * 100
+                      if file_coverage < 80.0:
+                          files_below_threshold.append((file_path, file_coverage, covered, statements))
           
           if total_statements == 0:
               print("No files found in bugfix_bumper/")
               sys.exit(1)
           
           coverage_percent = (total_covered / total_statements) * 100
-          print(f"bugfix_bumper/ coverage: {coverage_percent:.2f}%")
+          print(f"bugfix_bumper/ overall coverage: {coverage_percent:.2f}%")
           
+          # Check overall coverage (90% required)
           if coverage_percent < 90.0:
-              print(f"ERROR: Coverage {coverage_percent:.2f}% is below required 90%")
+              print(f"ERROR: Overall coverage {coverage_percent:.2f}% is below required 90%")
               sys.exit(1)
           else:
-              print(f"✓ Coverage {coverage_percent:.2f}% meets requirement of 90%")
+              print(f"✓ Overall coverage {coverage_percent:.2f}% meets requirement of 90%")
+          
+          # Check per-file coverage (80% required)
+          if files_below_threshold:
+              print("\nERROR: The following files are below the 80% per-file coverage requirement:")
+              for file_path, file_coverage, covered, statements in files_below_threshold:
+                  print(f"  {file_path}: {file_coverage:.2f}% ({covered}/{statements} statements)")
+              sys.exit(1)
+          else:
+              print("✓ All files meet the 80% per-file coverage requirement")
           EOF
       
       - name: Check tests/ coverage (80% required)

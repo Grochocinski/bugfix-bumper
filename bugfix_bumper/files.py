@@ -1,175 +1,52 @@
 """File system operations for package.json and backups."""
 
-import json
-import os
 import shutil
 import sys
 from pathlib import Path
 from typing import Dict, List
 
-
-def find_package_json_files(repo_root: Path) -> List[Path]:
-    """Find all package.json files in the repository, recursively searching subdirectories."""
-    files = []
-
-    # Directories to exclude from search (skip entire subtrees)
-    excluded_dirs = {
-        "node_modules",
-        ".git",
-        "vendor",
-    }
-
-    # First, check if root package.json exists and has workspaces
-    root_package_json = repo_root / "package.json"
-
-    if root_package_json.exists():
-        files.append(root_package_json)
-        try:
-            with open(root_package_json) as f:
-                data = json.load(f)
-
-            # Include workspace package.json files explicitly
-            workspaces = data.get("workspaces", [])
-            for workspace in workspaces:
-                workspace_path = repo_root / workspace / "package.json"
-                if workspace_path.exists():
-                    files.append(workspace_path)
-        except (json.JSONDecodeError, KeyError):
-            pass
-
-    # Use os.walk for efficient directory tree traversal with early skipping
-    repo_root_str = str(repo_root)
-    seen_files = {Path(f) for f in files}  # Track files we've already added
-
-    for root, dirs, filenames in os.walk(repo_root_str):
-        # Skip excluded directories by removing them from dirs list
-        # This prevents os.walk from descending into them
-        dirs[:] = [
-            d for d in dirs if d not in excluded_dirs and not d.startswith(".package-json-backups-")
-        ]
-
-        # Check if current directory should be skipped
-        root_path = Path(root)
-        if any(
-            part in excluded_dirs or part.startswith(".package-json-backups-")
-            for part in root_path.parts
-        ):
-            continue
-
-        # Check for package.json in current directory
-        if "package.json" in filenames:
-            package_json = root_path / "package.json"
-            if package_json not in seen_files:
-                files.append(package_json)
-                seen_files.add(package_json)
-
-    # Sort for consistent ordering
-    files.sort()
-    return files
+from bugfix_bumper.package_manager import get_package_manager_for_location
 
 
-def find_go_mod_files(repo_root: Path) -> List[Path]:
-    """Find all go.mod files in the repository, recursively searching subdirectories."""
-    files = []
-
-    # Directories to exclude from search (skip entire subtrees)
-    excluded_dirs = {
-        "node_modules",
-        ".git",
-        "vendor",
-    }
-
-    # Check if root go.mod exists
-    root_go_mod = repo_root / "go.mod"
-    if root_go_mod.exists():
-        files.append(root_go_mod)
-
-    # Use os.walk for efficient directory tree traversal with early skipping
-    repo_root_str = str(repo_root)
-    seen_files = {Path(f) for f in files}  # Track files we've already added
-
-    for root, dirs, filenames in os.walk(repo_root_str):
-        # Skip excluded directories by removing them from dirs list
-        # This prevents os.walk from descending into them
-        dirs[:] = [
-            d for d in dirs if d not in excluded_dirs and not d.startswith(".package-json-backups-")
-        ]
-
-        # Check if current directory should be skipped
-        root_path = Path(root)
-        if any(
-            part in excluded_dirs or part.startswith(".package-json-backups-")
-            for part in root_path.parts
-        ):
-            continue
-
-        # Check for go.mod in current directory
-        if "go.mod" in filenames:
-            go_mod = root_path / "go.mod"
-            if go_mod not in seen_files:
-                files.append(go_mod)
-                seen_files.add(go_mod)
-
-    # Sort for consistent ordering
-    files.sort()
-    return files
-
-
-def backup_files(package_json: Path) -> Dict[str, Path]:
+def backup_files(file_path: Path) -> Dict[str, Path]:
     """
-    Backup package.json, lock files, and node_modules by renaming to .old versions.
-    Also handles go.mod and go.sum files for Go modules.
+    Backup dependency files and related files by renaming to .old versions.
+    Uses PackageManager to determine which files to backup.
     Returns dict mapping original names to backup paths.
     """
     backup_paths = {}
-    package_dir = package_json.parent
+    package_dir = file_path.parent
 
-    # Determine if this is a go.mod file (passed as package_json parameter)
-    is_go_mod = package_json.name == "go.mod"
-    is_package_json = package_json.name == "package.json"
+    # Get package manager for this file to determine backup files
+    # We need repo_root, but we don't have it here. Try to infer from file_path
+    # For now, use a simple approach: detect from file name
+    if file_path.name == "go.mod":
+        from bugfix_bumper.managers import GoPackageManager
 
-    if is_go_mod:
-        # Backup go.mod
-        if package_json.exists():
-            backup_path = package_json.with_suffix(package_json.suffix + ".old")
-            package_json.rename(backup_path)
-            backup_paths["go.mod"] = backup_path
+        pm = GoPackageManager()
+    else:
+        # For package.json, we need repo_root to properly detect
+        # Use a fallback: try to find repo root by walking up
+        repo_root = file_path
+        while repo_root.parent != repo_root:
+            repo_root = repo_root.parent
+            if (repo_root / ".git").exists() or (repo_root / "go.mod").exists():
+                break
 
-        # Backup go.sum (changes when go.mod changes)
-        go_sum = package_dir / "go.sum"
-        if go_sum.exists():
-            backup_path = go_sum.with_suffix(go_sum.suffix + ".old")
-            go_sum.rename(backup_path)
-            backup_paths["go.sum"] = backup_path
+        pm = get_package_manager_for_location(repo_root, file_path)
 
-        # Don't backup vendor/ directory (too large, not critical)
-    elif is_package_json:
-        # Backup package.json
-        if package_json.exists():
-            backup_path = package_json.with_suffix(package_json.suffix + ".old")
-            package_json.rename(backup_path)
-            backup_paths["package.json"] = backup_path
+    # Get list of files to backup from package manager
+    backup_file_names = pm.get_backup_files(file_path)
 
-        # Backup package-lock.json
-        lock_file = package_dir / "package-lock.json"
-        if lock_file.exists():
-            backup_path = lock_file.with_suffix(lock_file.suffix + ".old")
-            lock_file.rename(backup_path)
-            backup_paths["package-lock.json"] = backup_path
-
-        # Backup yarn.lock
-        yarn_lock = package_dir / "yarn.lock"
-        if yarn_lock.exists():
-            backup_path = yarn_lock.with_suffix(yarn_lock.suffix + ".old")
-            yarn_lock.rename(backup_path)
-            backup_paths["yarn.lock"] = backup_path
-
-        # Backup node_modules
-        node_modules = package_dir / "node_modules"
-        if node_modules.exists() and node_modules.is_dir():
-            backup_path = package_dir / "node_modules.old"
-            node_modules.rename(backup_path)
-            backup_paths["node_modules"] = backup_path
+    # Backup each file
+    for file_name in backup_file_names:
+        file_to_backup = package_dir / file_name
+        if file_to_backup.exists():
+            backup_path = file_to_backup.with_suffix(file_to_backup.suffix + ".old")
+            if file_to_backup.is_dir():
+                backup_path = package_dir / f"{file_name}.old"
+            file_to_backup.rename(backup_path)
+            backup_paths[file_name] = backup_path
 
     return backup_paths
 

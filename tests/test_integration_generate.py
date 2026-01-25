@@ -15,10 +15,8 @@ bugfix_bumper_generate = importlib.util.module_from_spec(spec)
 sys.modules["bugfix_bumper_generate"] = bugfix_bumper_generate
 spec.loader.exec_module(bugfix_bumper_generate)
 
-from bugfix_bumper_generate import (  # type: ignore[unresolved-import]
-    detect_package_manager,
-    find_package_json_files,
-)
+from bugfix_bumper.managers import NpmPackageManager
+from bugfix_bumper.package_manager import detect_package_manager
 
 
 class TestMainGenerate:
@@ -50,7 +48,8 @@ class TestMainGenerate:
         package_manager = detect_package_manager(temp_dir, None)
 
         assert package_manager == "yarn"
-        files = find_package_json_files(temp_dir)
+        pm = NpmPackageManager()
+        files = pm.find_files(temp_dir)
         assert len(files) > 0
 
 
@@ -59,30 +58,33 @@ class TestEdgeCases:
 
     def test_version_parsing_single_digit(self):
         """Single digit versions."""
-        from bugfix_bumper.version import extract_base_version, extract_major_minor
+        from bugfix_bumper.managers import NpmPackageManager
 
-        assert extract_major_minor("1") == "1.0"
-        assert extract_base_version("1") == "1"
+        pm = NpmPackageManager()
+        assert pm.extract_major_minor("1") == "1.0"
+        assert pm.extract_base_version("1") == "1"
 
     def test_version_parsing_very_long_version_string(self):
         """Very long version strings."""
-        from bugfix_bumper.version import extract_base_version, extract_major_minor
+        from bugfix_bumper.managers import NpmPackageManager
 
+        pm = NpmPackageManager()
         long_version = "^1.2.3.4.5.6.7.8.9.10"
-        assert extract_major_minor(long_version) == "1.2"
-        assert extract_base_version(long_version) == "1.2.3.4.5.6.7.8.9.10"
+        assert pm.extract_major_minor(long_version) == "1.2"
+        assert pm.extract_base_version(long_version) == "1.2.3.4.5.6.7.8.9.10"
 
     def test_special_characters_in_package_names(self, temp_dir, mocker):
         """Special characters in package names."""
         from bugfix_bumper.cache import PackageCache
-        from bugfix_bumper.processing import process_dependency
+        from bugfix_bumper.managers import YarnPackageManager
 
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
-        mocker.patch("bugfix_bumper.version.find_latest_patch", return_value="1.2.5")
+        pm = YarnPackageManager()
+        mocker.patch.object(pm, "find_latest_patch", return_value="1.2.5")
 
         # Package name with special characters
-        result = process_dependency(
-            "@scope/package-name", "^1.2.3", "dependencies", "package.json", "yarn", temp_dir, cache
+        result = pm.process_dependency(
+            "@scope/package-name", "^1.2.3", "dependencies", "package.json", temp_dir, cache
         )
         # Should handle normally
         assert result is None or isinstance(result, dict)
@@ -90,12 +92,13 @@ class TestEdgeCases:
     def test_unicode_in_package_names(self, temp_dir):
         """Unicode in package names."""
         from bugfix_bumper.cache import PackageCache
-        from bugfix_bumper.processing import process_dependency
+        from bugfix_bumper.managers import YarnPackageManager
 
         cache = PackageCache(temp_dir / "cache.json", ttl_hours=6.0, use_cache=True)
+        pm = YarnPackageManager()
         # Unicode package name
-        result = process_dependency(
-            "测试包", "^1.2.3", "dependencies", "package.json", "yarn", temp_dir, cache
+        result = pm.process_dependency(
+            "测试包", "^1.2.3", "dependencies", "package.json", temp_dir, cache
         )
         # Should handle gracefully
         assert result is None or isinstance(result, dict)

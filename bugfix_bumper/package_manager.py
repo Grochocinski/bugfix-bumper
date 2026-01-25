@@ -5,6 +5,13 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from bugfix_bumper.managers import (
+    GoPackageManager,
+    NpmPackageManager,
+    PackageManager,
+    YarnPackageManager,
+)
+
 
 def detect_package_manager(repo_root: Path, forced: Optional[str] = None) -> str:
     """Detect package manager from lockfiles or go.mod files."""
@@ -149,3 +156,54 @@ def check_package_manager(pm: str):
     except (subprocess.TimeoutExpired, subprocess.CalledProcessError):
         print(f"Error: {pm} is required but not installed.", file=sys.stderr)
         sys.exit(1)
+
+
+def get_package_manager(repo_root: Path, forced: Optional[str] = None) -> PackageManager:
+    """
+    Factory function that returns appropriate PackageManager instance.
+
+    Args:
+        repo_root: Repository root directory
+        forced: Optional package manager name to force (e.g., 'go', 'npm', 'yarn')
+
+    Returns:
+        PackageManager instance (GoPackageManager, NpmPackageManager, or YarnPackageManager)
+
+    Raises:
+        SystemExit: If package manager cannot be detected or is invalid
+    """
+    detected = detect_package_manager(repo_root, forced)
+
+    if detected == "go":
+        return GoPackageManager()
+    if detected == "npm":
+        return NpmPackageManager()
+    if detected == "yarn":
+        return YarnPackageManager()
+    print("Error: Could not detect package manager.", file=sys.stderr)
+    print(
+        "Please ensure yarn.lock, package-lock.json, or go.mod exists, or use --package-manager",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+
+def get_package_manager_for_location(repo_root: Path, file_path: Path) -> PackageManager:
+    """
+    Get PackageManager instance for a specific file location.
+
+    Args:
+        repo_root: Repository root directory
+        file_path: Path to package.json or go.mod file
+
+    Returns:
+        PackageManager instance appropriate for the file location
+    """
+    detected = detect_package_manager_for_location(repo_root, file_path)
+
+    if detected == "go":
+        return GoPackageManager()
+    if detected == "yarn":
+        return YarnPackageManager()
+    # npm or default
+    return NpmPackageManager()

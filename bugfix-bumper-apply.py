@@ -115,20 +115,31 @@ NOTES:
         print("No upgrades to apply.")
         sys.exit(0)
 
+    # Validate that all upgrades are for the same package manager type
+    locations = {u["location"] for u in upgrades}
+    go_mod_files = {loc for loc in locations if loc.endswith("go.mod")}
+    package_json_files = {loc for loc in locations if loc.endswith("package.json")}
+
+    if go_mod_files and package_json_files:
+        print(
+            "Error: Upgrades file contains both go.mod and package.json files.",
+            file=sys.stderr,
+        )
+        print(
+            "Please generate separate upgrade files for Go modules and npm/yarn packages.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     print(f"Applying {len(upgrades)} upgrades from {upgrades_file}")
     print(f"Repository root: {repo_root}")
     print()
 
     # Confirm before applying
-    file_type = "files"
-    if upgrades:
-        # Determine file type from first upgrade
-        first_location = upgrades[0]["location"]
-        file_type = "go.mod files" if first_location.endswith("go.mod") else "package.json files"
+    file_type = "go.mod files" if go_mod_files else "package.json files"
 
     print(f"This will modify the following {file_type}:")
-    locations = sorted({u["location"] for u in upgrades})
-    for location in locations:
+    for location in sorted(locations):
         print(f"  - {location}")
     print()
 

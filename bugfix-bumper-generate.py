@@ -12,10 +12,10 @@ import sys
 from pathlib import Path
 
 from bugfix_bumper.cache import PackageCache
-from bugfix_bumper.files import find_go_mod_files, find_package_json_files
+from bugfix_bumper.managers import GoPackageManager
 from bugfix_bumper.output import generate_summary
-from bugfix_bumper.package_manager import check_package_manager, detect_package_manager
-from bugfix_bumper.processing import process_go_mod, process_package_json
+from bugfix_bumper.package_manager import check_package_manager, get_package_manager
+from bugfix_bumper.processing import process_file
 
 
 def main():
@@ -80,45 +80,34 @@ EXAMPLES:
     bugfix_bumper_dir = Path(__file__).parent.resolve()
     cache_file = bugfix_bumper_dir / ".bugfix-bumper-cache.json"
 
-    # Detect package manager
-    package_manager = detect_package_manager(repo_root, args.package_manager)
-    check_package_manager(package_manager)
+    # Get package manager instance
+    pm = get_package_manager(repo_root, args.package_manager)
+    check_package_manager(pm.name)
 
-    # Find files based on package manager
-    if package_manager == "go":
-        files = find_go_mod_files(repo_root)
-        if not files:
-            print(f"Error: No go.mod files found in {repo_root} or subdirectories", file=sys.stderr)
-            print(
-                "Please run this script from a directory containing go.mod file(s).",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-    else:
-        files = find_package_json_files(repo_root)
-        if not files:
-            print(
-                f"Error: No package.json files found in {repo_root} or subdirectories",
-                file=sys.stderr,
-            )
-            print(
-                "Please run this script from a directory containing package.json file(s).",
-                file=sys.stderr,
-            )
-            sys.exit(1)
+    # Find files using package manager
+    files = pm.find_files(repo_root)
+    if not files:
+        file_type = "go.mod" if isinstance(pm, GoPackageManager) else "package.json"
+        print(
+            f"Error: No {file_type} files found in {repo_root} or subdirectories",
+            file=sys.stderr,
+        )
+        print(
+            f"Please run this script from a directory containing {file_type} file(s).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     # Initialize cache
     use_cache = not args.no_cache
+    cache = PackageCache(cache_file, args.cache_ttl, use_cache=use_cache)
     if args.clear_cache or args.refresh_cache:
-        cache = PackageCache(cache_file, args.cache_ttl, use_cache=False)
         cache.clear()
-        cache = PackageCache(cache_file, args.cache_ttl, use_cache=True)
-    else:
-        cache = PackageCache(cache_file, args.cache_ttl, use_cache)
 
-    file_type = "go.mod files" if package_manager == "go" else "package.json files"
+    # Get file type from package manager
+    file_type = "go.mod files" if isinstance(pm, GoPackageManager) else "package.json files"
     print(f"Scanning {file_type} for patch version upgrades...")
-    print(f"Package manager: {package_manager}")
+    print(f"Package manager: {pm.name}")
     print(f"Repository root: {repo_root}")
     print(f"Output directory: {output_dir}")
     if use_cache:
@@ -136,24 +125,14 @@ EXAMPLES:
         location = str(file_path.relative_to(repo_root))
         print(f"[{i}/{total_files}] Processing: {location}")
 
-        if package_manager == "go":
-            upgrades = process_go_mod(
-                file_path,
-                repo_root,
-                package_manager,
-                include_dev=not args.no_dev,
-                include_prod=not args.no_prod,
-                cache=cache,
-            )
-        else:
-            upgrades = process_package_json(
-                file_path,
-                repo_root,
-                package_manager,
-                include_dev=not args.no_dev,
-                include_prod=not args.no_prod,
-                cache=cache,
-            )
+        upgrades = process_file(
+            file_path,
+            repo_root,
+            pm,
+            include_dev=not args.no_dev,
+            include_prod=not args.no_prod,
+            cache=cache,
+        )
         all_upgrades.extend(upgrades)
 
     # Save cache
@@ -164,7 +143,7 @@ EXAMPLES:
         json.dump(all_upgrades, f, indent=2)
 
     with open(summary_file, "w") as f:
-        f.write(generate_summary(all_upgrades, package_manager, repo_root))
+        f.write(generate_summary(all_upgrades, pm.name, repo_root))
 
     upgrade_count = len(all_upgrades)
     print()

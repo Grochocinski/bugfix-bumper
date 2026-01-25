@@ -1,79 +1,33 @@
 """Bugfix bumper package for managing npm package and Go module patch version upgrades."""
 
+# Core classes and utilities
 from bugfix_bumper.cache import PackageCache
-from bugfix_bumper.files import (
-    backup_files,
-    cleanup_backups,
-    find_backup_files,
-    find_go_mod_files,
-    find_package_json_files,
-    restore_all_backups,
-    restore_files,
-)
-from bugfix_bumper.git import (
-    add_gitignore_patterns,
-    gitignore_patterns,
-    is_git_repo,
-    remove_gitignore_patterns,
-)
-from bugfix_bumper.go_modules import (
-    get_go_module_versions,
-    parse_go_mod,
-    regenerate_go_sum,
-    update_go_mod_versions,
-    verify_go_build,
-)
-from bugfix_bumper.npm_yarn import get_package_versions, regenerate_lock_file, verify_build
-from bugfix_bumper.output import generate_summary
-from bugfix_bumper.package_manager import (
-    check_package_manager,
-    detect_package_manager,
-    detect_package_manager_for_location,
-)
-from bugfix_bumper.processing import (
-    apply_upgrades,
-    process_dependency,
-    process_go_mod,
-    process_package_json,
-)
-from bugfix_bumper.version import (
-    extract_base_version,
-    extract_major_minor,
-    find_latest_patch,
-    get_range_prefix,
+
+# Package manager implementations (primary API)
+from bugfix_bumper.managers import (
+    GoPackageManager,
+    NpmPackageManager,
+    PackageManager,
+    YarnPackageManager,
 )
 
+# Factory functions for getting package manager instances
+from bugfix_bumper.package_manager import (
+    get_package_manager,
+    get_package_manager_for_location,
+)
+
+# High-level processing functions
+from bugfix_bumper.processing import apply_upgrades, process_file
+
 __all__ = [
+    "GoPackageManager",
+    "NpmPackageManager",
     "PackageCache",
-    "add_gitignore_patterns",
+    "PackageManager",
+    "YarnPackageManager",
     "apply_upgrades",
-    "backup_files",
-    "check_package_manager",
-    "cleanup_backups",
-    "detect_package_manager",
-    "detect_package_manager_for_location",
-    "extract_base_version",
-    "extract_major_minor",
-    "find_backup_files",
-    "find_go_mod_files",
-    "find_latest_patch",
-    "find_package_json_files",
-    "generate_summary",
-    "get_go_module_versions",
-    "get_package_versions",
-    "get_range_prefix",
-    "gitignore_patterns",
-    "is_git_repo",
-    "parse_go_mod",
-    "process_dependency",
-    "process_go_mod",
-    "process_package_json",
-    "regenerate_go_sum",
-    "regenerate_lock_file",
-    "remove_gitignore_patterns",
-    "restore_all_backups",
-    "restore_files",
-    "update_go_mod_versions",
-    "verify_build",
-    "verify_go_build",
+    "get_package_manager",
+    "get_package_manager_for_location",
+    "process_file",
 ]
