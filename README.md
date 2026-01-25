@@ -227,7 +227,7 @@ cat patch-upgrades-summary.md
    - Determines the major.minor version (e.g., `1.2`)
    - Queries the package registry/module versions (uses cache when available):
      - npm/yarn: Uses `npm view` command
-     - Go: Uses `go list -m -mod=mod -versions` command (automatically handles vendored dependencies)
+     - Go: Uses `go list -m -mod=readonly -versions` command (automatically handles vendored dependencies without modifying go.sum)
    - Finds the latest patch version within the same major.minor (e.g., `1.2.5` or `v1.2.5`)
    - Filters out pre-release versions (anything with `-alpha`, `-beta`, `-rc`)
    - For Go: Filters out pseudo-versions (commit-based versions)

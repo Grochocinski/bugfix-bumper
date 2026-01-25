@@ -24,10 +24,10 @@ def get_go_module_versions(
         return [v for v in cached if not v.endswith("+incompatible")]
 
     # Fetch from Go command
-    # Use -mod=mod to bypass vendor directory if present
+    # Use -mod=readonly to bypass vendor directory without modifying go.sum
     try:
         result = subprocess.run(
-            ["go", "list", "-m", "-mod=mod", "-versions", module],
+            ["go", "list", "-m", "-mod=readonly", "-versions", module],
             cwd=str(repo_root),
             capture_output=True,
             text=True,
@@ -171,7 +171,7 @@ def parse_go_mod(go_mod_dir: Path) -> Optional[Dict]:
     """
     try:
         result = subprocess.run(
-            ["go", "list", "-m", "-mod=mod", "-json", "all"],
+            ["go", "list", "-m", "-mod=readonly", "-json", "all"],
             cwd=str(go_mod_dir),
             capture_output=True,
             text=True,
