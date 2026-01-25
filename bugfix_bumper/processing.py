@@ -268,7 +268,7 @@ def apply_upgrades(repo_root: Path, upgrades: List[Dict], create_backups: bool =
         # Step 4: Regenerate lock file
         lock_file_name = "yarn.lock" if package_manager == "yarn" else "package-lock.json"
         print(f"  Regenerating {lock_file_name}...")
-        regen_success, regen_output = regenerate_lock_file(package_dir, package_manager)
+        regen_success, regen_output = regenerate_lock_file(package_dir, package_manager, repo_root)
 
         if not regen_success:
             print("  ✗ Failed to regenerate lock file", file=sys.stderr)

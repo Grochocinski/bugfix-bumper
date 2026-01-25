@@ -76,16 +76,36 @@ def get_package_versions(
     return []
 
 
-def regenerate_lock_file(package_json_dir: Path, package_manager: str) -> Tuple[bool, str]:
+def regenerate_lock_file(
+    package_json_dir: Path, package_manager: str, repo_root: Path = None
+) -> Tuple[bool, str]:
     """
     Regenerate lock file by running npm install or yarn install.
+    For Yarn workspaces, runs from repo root instead of package directory.
     Returns (success: bool, output: str).
     """
     try:
         if package_manager == "yarn":
+            # For Yarn workspaces, we need to run from the repo root
+            # Check if this is a workspace package
+            install_dir = package_json_dir
+            if repo_root:
+                root_package_json = repo_root / "package.json"
+                package_json = package_json_dir / "package.json"
+                if root_package_json.exists() and package_json != root_package_json:
+                    try:
+                        with open(root_package_json) as f:
+                            root_data = json.load(f)
+                        if "workspaces" in root_data:
+                            # This is a workspace package, run from root
+                            install_dir = repo_root
+                    except (OSError, json.JSONDecodeError):
+                        pass
+
+            # Use --mode=update-lockfile for Yarn to allow lockfile creation/updates
             result = subprocess.run(
-                ["yarn", "install"],
-                cwd=str(package_json_dir),
+                ["yarn", "install", "--mode=update-lockfile"],
+                cwd=str(install_dir),
                 capture_output=True,
                 text=True,
                 timeout=300,
