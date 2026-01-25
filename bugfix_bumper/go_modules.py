@@ -24,9 +24,10 @@ def get_go_module_versions(
         return [v for v in cached if not v.endswith("+incompatible")]
 
     # Fetch from Go command
+    # Use -mod=mod to bypass vendor directory if present
     try:
         result = subprocess.run(
-            ["go", "list", "-m", "-versions", module],
+            ["go", "list", "-m", "-mod=mod", "-versions", module],
             cwd=str(repo_root),
             capture_output=True,
             text=True,
@@ -170,7 +171,7 @@ def parse_go_mod(go_mod_dir: Path) -> Optional[Dict]:
     """
     try:
         result = subprocess.run(
-            ["go", "list", "-m", "-json", "all"],
+            ["go", "list", "-m", "-mod=mod", "-json", "all"],
             cwd=str(go_mod_dir),
             capture_output=True,
             text=True,
@@ -181,13 +182,25 @@ def parse_go_mod(go_mod_dir: Path) -> Optional[Dict]:
             return None
 
         # Parse NDJSON output (newline-delimited JSON)
+        # Each JSON object can span multiple lines, so we need to parse them properly
         modules = []
-        for line in result.stdout.strip().split("\n"):
-            if line.strip():
+        current_json = ""
+        brace_count = 0
+
+        for line in result.stdout.split("\n"):
+            current_json += line + "\n"
+            # Count braces to detect complete JSON objects
+            brace_count += line.count("{") - line.count("}")
+
+            # When brace_count reaches 0, we have a complete JSON object
+            if brace_count == 0 and current_json.strip():
                 try:
-                    module_data = json.loads(line)
+                    module_data = json.loads(current_json.strip())
                     modules.append(module_data)
+                    current_json = ""
                 except json.JSONDecodeError:
+                    # If parsing fails, reset and continue
+                    current_json = ""
                     continue
 
         return {"modules": modules}

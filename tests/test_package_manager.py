@@ -94,12 +94,38 @@ class TestCheckPackageManager:
             check_package_manager("unknown")
 
     def test_package_manager_not_installed(self, mocker):
-        """Package manager not installed (FileNotFoundError)."""
+        """Package manager not installed (FileNotFoundError) - npm/yarn."""
         mock_run = mocker.patch("subprocess.run")
         mock_run.side_effect = FileNotFoundError()
         mocker.patch("builtins.print")
         with pytest.raises(SystemExit):
             check_package_manager("yarn")
+
+    def test_check_package_manager_go_not_in_path(self, mocker, capsys):
+        """Go command not in PATH - should show helpful error message."""
+        mock_run = mocker.patch("subprocess.run")
+        mock_run.side_effect = FileNotFoundError()
+        # Don't mock print - we want to capture the actual output
+        with pytest.raises(SystemExit):
+            check_package_manager("go")
+
+        # Check that helpful error message was printed
+        captured = capsys.readouterr()
+        assert "'go' command not found in PATH" in captured.err
+        assert "Please ensure Go is installed" in captured.err
+        assert "go version" in captured.err
+
+    def test_check_package_manager_go_version_command(self, mocker):
+        """Verify go version (not go --version) is used for Go."""
+        mock_run = mocker.patch("subprocess.run")
+        mock_run.return_value.returncode = 0
+
+        check_package_manager("go")
+
+        # Verify the correct command was called
+        mock_run.assert_called_once()
+        call_args = mock_run.call_args[0][0]
+        assert call_args == ["go", "version"]
 
     def test_command_timeout(self, mocker):
         """Command timeout (TimeoutExpired)."""

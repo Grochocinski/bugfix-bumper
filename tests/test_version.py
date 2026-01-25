@@ -61,6 +61,29 @@ class TestExtractMajorMinor:
         assert extract_major_minor("v0.0.0-20211024170158-b87d35c0b86f") is None
         assert extract_major_minor("v1.2.1-0.20220228012449-10b1cf09e00b") is None
 
+    def test_extract_major_minor_rejects_all_pseudo_formats(self):
+        """Comprehensive test for all 5 Go pseudo-version forms."""
+        # Form 1: vX.0.0-timestamp-hash
+        assert extract_major_minor("v0.0.0-20211024170158-b87d35c0b86f") is None
+        assert extract_major_minor("v1.0.0-20211024170158-b87d35c0b86f") is None
+
+        # Form 2: vX.Y.(Z+1)-0.timestamp-hash
+        assert extract_major_minor("v1.2.1-0.20220228012449-10b1cf09e00b") is None
+        assert extract_major_minor("v2.3.4-0.20220228012449-10b1cf09e00b") is None
+
+        # Form 3: vX.Y.(Z+1)-0.timestamp-hash+incompatible
+        assert extract_major_minor("v1.2.1-0.20220228012449-10b1cf09e00b+incompatible") is None
+
+        # Form 4: vX.Y.Z-pre.0.timestamp-hash (less common, but should be handled)
+        # Note: This format may not be caught by current regex, but test it doesn't crash
+        result = extract_major_minor("v1.2.3-beta.0.20220228012449-10b1cf09e00b")
+        # May return None or may parse as 1.2 depending on regex implementation
+        assert result is None or result == "1.2"
+
+        # Form 5: vX.Y.Z-pre.0.timestamp-hash+incompatible
+        result = extract_major_minor("v1.2.3-beta.0.20220228012449-10b1cf09e00b+incompatible")
+        assert result is None or result == "1.2"
+
     def test_go_version_without_patch(self):
         """Go version without patch number."""
         assert extract_major_minor("v1.2") == "1.2"

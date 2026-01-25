@@ -30,6 +30,7 @@ NOTES:
     - Automatically regenerates package-lock.json, yarn.lock, or go.sum files
     - Verifies builds with npm ci, yarn install --frozen-lockfile, or go mod verify
     - Use --restore to revert changes from .old backup files
+    - Use --dry-run to preview changes without applying them
         """,
     )
 
@@ -53,6 +54,11 @@ NOTES:
         "--restore",
         action="store_true",
         help="Restore files from .old backups instead of applying upgrades",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be changed without making any modifications (skips confirmation prompt)",
     )
 
     args = parser.parse_args()
@@ -126,17 +132,18 @@ NOTES:
         print(f"  - {location}")
     print()
 
-    response = input("Continue? [y/N]: ").strip().lower()
-    if response != "y":
-        print("Cancelled.")
-        sys.exit(0)
-
-    print()
+    # Skip confirmation prompt in dry-run mode
+    if not args.dry_run:
+        response = input("Continue? [y/N]: ").strip().lower()
+        if response != "y":
+            print("Cancelled.")
+            sys.exit(0)
+        print()
 
     # Add gitignore patterns before applying upgrades, automatically removed on exit
     with gitignore_patterns(repo_root):
         # Apply upgrades
-        apply_upgrades(repo_root, upgrades, create_backups=args.backup)
+        apply_upgrades(repo_root, upgrades, create_backups=args.backup, dry_run=args.dry_run)
 
 
 if __name__ == "__main__":

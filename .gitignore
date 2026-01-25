@@ -31,7 +31,7 @@ dmypy.json
 
 # Coverage
 htmlcov/
-.coverage
+.coverage*
 coverage.json
 coverage.xml
 *.cover

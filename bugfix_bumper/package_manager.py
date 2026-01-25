@@ -132,7 +132,20 @@ def check_package_manager(pm: str):
         sys.exit(1)
 
     try:
-        subprocess.run([pm, "--version"], capture_output=True, check=True, timeout=5)
-    except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
+        # Go uses "version" as a subcommand, not "--version" flag
+        if pm == "go":
+            subprocess.run([pm, "version"], capture_output=True, check=True, timeout=5)
+        else:
+            subprocess.run([pm, "--version"], capture_output=True, check=True, timeout=5)
+    except FileNotFoundError:
+        if pm == "go":
+            print("Error: 'go' command not found in PATH.", file=sys.stderr)
+            print("Please ensure Go is installed and 'go' is in your PATH.", file=sys.stderr)
+            print("You can verify by running: go version", file=sys.stderr)
+            sys.exit(1)
+        else:
+            print(f"Error: {pm} is required but not installed.", file=sys.stderr)
+            sys.exit(1)
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError):
         print(f"Error: {pm} is required but not installed.", file=sys.stderr)
         sys.exit(1)

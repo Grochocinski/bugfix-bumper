@@ -39,7 +39,7 @@ npm install
 
 - Python 3.8+ (no external dependencies required)
 - `yarn` or `npm` (for npm/yarn projects)
-- `go` command (for Go module projects)
+- `go` command (for Go module projects) - must be available in your PATH
 
 ## Installation
 
@@ -133,6 +133,7 @@ Usage: bugfix-bumper-apply.py [OPTIONS] <upgrade-report.json>
 OPTIONS:
     -r, --root DIR              Repository root directory (default: current directory)
     --backup                     Create backups of package.json files
+    --dry-run                    Show what would be changed without making any modifications (skips confirmation prompt)
     -h, --help                  Show this help message
 
 ARGUMENTS:
@@ -191,6 +192,13 @@ cat patch-upgrades-summary.md
 ./bugfix-bumper-generate.py --no-prod
 ```
 
+### Dry Run (Preview Changes)
+
+```bash
+# Preview what would be changed without applying
+./bugfix-bumper-apply.py --dry-run patch-upgrades.json
+```
+
 ### Cache Management
 
 ```bash
@@ -219,7 +227,7 @@ cat patch-upgrades-summary.md
    - Determines the major.minor version (e.g., `1.2`)
    - Queries the package registry/module versions (uses cache when available):
      - npm/yarn: Uses `npm view` command
-     - Go: Uses `go list -m -versions` command
+     - Go: Uses `go list -m -mod=mod -versions` command (automatically handles vendored dependencies)
    - Finds the latest patch version within the same major.minor (e.g., `1.2.5` or `v1.2.5`)
    - Filters out pre-release versions (anything with `-alpha`, `-beta`, `-rc`)
    - For Go: Filters out pseudo-versions (commit-based versions)
@@ -374,6 +382,26 @@ If `go list -m -versions` fails (e.g., for private modules or network issues), t
 ### Version mismatch warnings
 
 If you see "current version mismatch" warnings when applying, it means the package.json file was modified between generating the report and applying it. Review the changes and regenerate the report if needed.
+
+### Vendored Dependencies
+
+If your repository uses vendored dependencies (has a `vendor/` directory), the tool automatically handles this by using the `-mod=mod` flag when querying the Go module proxy. No additional configuration is needed - the tool will bypass the vendor directory to discover available versions.
+
+### Go command not found
+
+If you see an error that `'go' command not found in PATH`, ensure that:
+- Go is installed on your system
+- The `go` command is available in your PATH
+- You can verify by running: `go version`
+
+If Go is installed but not in PATH, you may need to:
+- Add Go's bin directory to your PATH environment variable
+- Restart your terminal/command prompt
+- Check your Go installation documentation for PATH setup instructions
+
+### Pseudo-Versions
+
+Go modules sometimes use pseudo-versions (commit-based versions like `v0.0.0-20211024170158-b87d35c0b86f` or `v1.2.1-0.20220228012449-10b1cf09e00b`). These are automatically skipped during upgrade detection as they cannot be patch-upgraded in the traditional sense. You'll see a warning message when pseudo-versions are encountered, but processing will continue normally.
 
 ## License
 

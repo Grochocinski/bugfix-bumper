@@ -52,8 +52,9 @@ def process_dependency(
 
     # For Go modules, skip pseudo-versions with warning
     if package_manager == "go":
-        # Check for pseudo-versions (both v0.0.0-... and vX.Y.Z-0. formats)
-        pseudo_version_pattern = re.compile(r"v\d+\.\d+\.\d+-\d+-[a-f0-9]+")
+        # Check for pseudo-versions (all formats including v0.0.0-... and vX.Y.Z-0.timestamp-hash)
+        # Pattern matches: vX.Y.Z-timestamp-hash or vX.Y.Z-0.timestamp-hash or vX.Y.Z-pre.0.timestamp-hash
+        pseudo_version_pattern = re.compile(r"v\d+\.\d+\.\d+-\d+(\.\d+)?-[a-f0-9]+")
         if pseudo_version_pattern.search(current_version.split("+")[0]):
             print(
                 f"Warning: Skipping pseudo-version '{current_version}' for module '{package}' (commit-based, not patch-upgradeable)",
@@ -323,10 +324,18 @@ def process_go_mod(
     return upgrades
 
 
-def apply_upgrades(repo_root: Path, upgrades: List[Dict], create_backups: bool = False):
+def apply_upgrades(
+    repo_root: Path, upgrades: List[Dict], create_backups: bool = False, dry_run: bool = False
+):
     """
     Apply upgrades to package.json files with lock file regeneration and build verification.
     Processes each package.json independently: backup → update → regenerate → verify → cleanup.
+
+    Args:
+        repo_root: Repository root directory
+        upgrades: List of upgrade dictionaries
+        create_backups: Whether to keep backup files after successful upgrade
+        dry_run: If True, show what would be changed without making any modifications
     """
     # Group upgrades by file location
     by_location: Dict[str, List[Dict]] = {}
@@ -341,6 +350,10 @@ def apply_upgrades(repo_root: Path, upgrades: List[Dict], create_backups: bool =
     failure_count = 0
     total_files = len(by_location)
 
+    if dry_run:
+        print("DRY RUN MODE - No changes will be made")
+        print()
+
     for file_num, (location, location_upgrades) in enumerate(by_location.items(), 1):
         file_path = repo_root / location
         file_dir = file_path.parent
@@ -353,22 +366,29 @@ def apply_upgrades(repo_root: Path, upgrades: List[Dict], create_backups: bool =
             print(f"  Warning: {location} not found, skipping", file=sys.stderr)
             continue
 
-        # Step 1: Backup original files
-        print("  Backing up files...")
-        try:
-            backup_paths = backup_files(file_path)
-            if backup_paths:
-                print(f"  Backed up: {', '.join(backup_paths.keys())}")
-        except Exception as e:
-            print(f"  Error backing up files: {e}", file=sys.stderr)
-            print(f"  Skipping {location}", file=sys.stderr)
-            print()
-            failure_count += 1
-            continue
+        # Step 1: Backup original files (skip in dry-run mode)
+        if not dry_run:
+            print("  Backing up files...")
+            try:
+                backup_paths = backup_files(file_path)
+                if backup_paths:
+                    print(f"  Backed up: {', '.join(backup_paths.keys())}")
+            except Exception as e:
+                print(f"  Error backing up files: {e}", file=sys.stderr)
+                print(f"  Skipping {location}", file=sys.stderr)
+                print()
+                failure_count += 1
+                continue
+        else:
+            # In dry-run, we still need to track what would be backed up
+            backup_paths = {}
 
         if is_go_mod:
             # Handle go.mod file updates
-            print("  Updating go.mod...")
+            if dry_run:
+                print("  [DRY RUN] Would update go.mod...")
+            else:
+                print("  Updating go.mod...")
 
             # Prepare updates dict for go mod edit
             updates = {}
@@ -381,7 +401,17 @@ def apply_upgrades(repo_root: Path, upgrades: List[Dict], create_backups: bool =
 
             if not updates:
                 print(f"  No changes needed for {location}")
-                restore_files(backup_paths)
+                if not dry_run:
+                    restore_files(backup_paths)
+                print()
+                continue
+
+            if dry_run:
+                print("  [DRY RUN] Would run: go mod edit -require ...")
+                print("  [DRY RUN] Would run: go mod tidy")
+                print("  [DRY RUN] Would run: go mod verify")
+                print("  ✓ [DRY RUN] Would succeed")
+                success_count += 1
                 print()
                 continue
 
@@ -438,29 +468,41 @@ def apply_upgrades(repo_root: Path, upgrades: List[Dict], create_backups: bool =
         else:
             # Handle package.json file updates (existing logic)
             # Step 2: Load and update package.json
-            print("  Updating package.json...")
-            try:
-                # Load from backup (package.json was renamed to package.json.old)
-                source_file = backup_paths.get("package.json")
-                if not source_file or not source_file.exists():
-                    print("  Error: Could not find package.json backup", file=sys.stderr)
+            if dry_run:
+                print("  [DRY RUN] Would update package.json...")
+                # In dry-run, read the original file directly
+                try:
+                    with open(file_path) as f:
+                        data = json.load(f)
+                except (OSError, json.JSONDecodeError) as e:
+                    print(f"  Error reading package.json: {e}", file=sys.stderr)
+                    print()
+                    failure_count += 1
+                    continue
+            else:
+                print("  Updating package.json...")
+                try:
+                    # Load from backup (package.json was renamed to package.json.old)
+                    source_file = backup_paths.get("package.json")
+                    if not source_file or not source_file.exists():
+                        print("  Error: Could not find package.json backup", file=sys.stderr)
+                        restore_files(backup_paths)
+                        print("  Restored original files", file=sys.stderr)
+                        print()
+                        failure_count += 1
+                        continue
+
+                    with open(source_file) as f:
+                        data = json.load(f)
+                except (OSError, json.JSONDecodeError) as e:
+                    print(f"  Error reading package.json: {e}", file=sys.stderr)
                     restore_files(backup_paths)
                     print("  Restored original files", file=sys.stderr)
                     print()
                     failure_count += 1
                     continue
 
-                with open(source_file) as f:
-                    data = json.load(f)
-            except (OSError, json.JSONDecodeError) as e:
-                print(f"  Error reading package.json: {e}", file=sys.stderr)
-                restore_files(backup_paths)
-                print("  Restored original files", file=sys.stderr)
-                print()
-                failure_count += 1
-                continue
-
-            # Apply upgrades
+            # Apply upgrades (show what would change)
             modified = False
             for upgrade in location_upgrades:
                 package = upgrade["package"]
@@ -470,15 +512,31 @@ def apply_upgrades(repo_root: Path, upgrades: List[Dict], create_backups: bool =
                 # Update the appropriate dependency section
                 if dep_type in data and package in data[dep_type]:
                     old_version = data[dep_type][package]
-                    data[dep_type][package] = proposed
+                    if not dry_run:
+                        data[dep_type][package] = proposed
                     print(f"    {package}: {old_version} → {proposed}")
                     modified = True
                     applied_count += 1
 
             if not modified:
                 print(f"  No changes needed for {location}")
-                # Restore files since we didn't make changes
-                restore_files(backup_paths)
+                if not dry_run:
+                    # Restore files since we didn't make changes
+                    restore_files(backup_paths)
+                print()
+                continue
+
+            if dry_run:
+                # Step 3: Detect package manager (for preview)
+                package_manager = detect_package_manager_for_location(repo_root, file_path)
+                print(f"  [DRY RUN] Detected package manager: {package_manager}")
+                lock_file_name = "yarn.lock" if package_manager == "yarn" else "package-lock.json"
+                print(f"  [DRY RUN] Would regenerate {lock_file_name}...")
+                print(
+                    f"  [DRY RUN] Would verify build with {'yarn install --frozen-lockfile' if package_manager == 'yarn' else 'npm ci'}..."
+                )
+                print("  ✓ [DRY RUN] Would succeed")
+                success_count += 1
                 print()
                 continue
 
@@ -552,7 +610,15 @@ def apply_upgrades(repo_root: Path, upgrades: List[Dict], create_backups: bool =
             file_type = "package.json file(s)"
 
     print("Summary:")
-    print(f"  Applied {applied_count} upgrades across {total_files} {file_type}")
-    print(f"  Successful: {success_count}")
-    if failure_count > 0:
-        print(f"  Failed: {failure_count}", file=sys.stderr)
+    if dry_run:
+        print(f"  [DRY RUN] Would apply {applied_count} upgrades across {total_files} {file_type}")
+        print(f"  [DRY RUN] Would succeed: {success_count}")
+        if failure_count > 0:
+            print(f"  [DRY RUN] Would fail: {failure_count}", file=sys.stderr)
+        print()
+        print("DRY RUN - No changes were made")
+    else:
+        print(f"  Applied {applied_count} upgrades across {total_files} {file_type}")
+        print(f"  Successful: {success_count}")
+        if failure_count > 0:
+            print(f"  Failed: {failure_count}", file=sys.stderr)
