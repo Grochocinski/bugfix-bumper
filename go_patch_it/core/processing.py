@@ -539,6 +539,9 @@ def apply_upgrades(
             if dry_run:
                 print("  [DRY RUN] Would run: go mod edit -require ...")
                 print("  [DRY RUN] Would run: go mod tidy")
+                vendor_dir = file_path.parent / "vendor"
+                if vendor_dir.exists():
+                    print("  [DRY RUN] Would run: go mod vendor")
                 print("  [DRY RUN] Would run: go mod verify")
                 print("  ✓ [DRY RUN] Would succeed")
                 success_count += 1
@@ -556,8 +559,12 @@ def apply_upgrades(
                 failure_count += 1
                 continue
 
-            # Step 3: Regenerate go.sum
-            print("  Regenerating go.sum...")
+            # Step 3: Regenerate go.sum (and vendor if exists)
+            vendor_dir = file_path.parent / "vendor"
+            if vendor_dir.exists():
+                print("  Regenerating go.sum and vendor...")
+            else:
+                print("  Regenerating go.sum...")
             regen_success, regen_output = package_manager.regenerate_lock(file_path, repo_root)
 
             if not regen_success:

@@ -486,6 +486,82 @@ class TestGoPackageManagerRegenerateLock:
         assert success is False
         assert "error" in output.lower()
 
+    def test_regenerate_lock_runs_vendor_when_exists(self, temp_dir, mocker):
+        """Runs go mod vendor when vendor directory exists."""
+        go_mod = temp_dir / "go.mod"
+        go_mod.write_text("module test\n\ngo 1.21\n")
+
+        # Create vendor directory
+        vendor_dir = temp_dir / "vendor"
+        vendor_dir.mkdir()
+
+        mock_run = mocker.patch("subprocess.run")
+        mock_result = mocker.Mock()
+        mock_result.returncode = 0
+        mock_result.stdout = ""
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
+
+        pm = GoPackageManager()
+        success, _output = pm.regenerate_lock(go_mod, temp_dir)
+
+        assert success is True
+        # Should have called subprocess.run twice: go mod tidy, then go mod vendor
+        assert mock_run.call_count == 2
+        calls = mock_run.call_args_list
+        assert calls[0][0][0] == ["go", "mod", "tidy"]
+        assert calls[1][0][0] == ["go", "mod", "vendor"]
+
+    def test_regenerate_lock_skips_vendor_when_not_exists(self, temp_dir, mocker):
+        """Skips go mod vendor when vendor directory does not exist."""
+        go_mod = temp_dir / "go.mod"
+        go_mod.write_text("module test\n\ngo 1.21\n")
+        # No vendor directory
+
+        mock_run = mocker.patch("subprocess.run")
+        mock_result = mocker.Mock()
+        mock_result.returncode = 0
+        mock_result.stdout = ""
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
+
+        pm = GoPackageManager()
+        success, _output = pm.regenerate_lock(go_mod, temp_dir)
+
+        assert success is True
+        # Should have called subprocess.run only once: go mod tidy
+        assert mock_run.call_count == 1
+        assert mock_run.call_args[0][0] == ["go", "mod", "tidy"]
+
+    def test_regenerate_lock_vendor_failure(self, temp_dir, mocker):
+        """Fails if go mod vendor fails."""
+        go_mod = temp_dir / "go.mod"
+        go_mod.write_text("module test\n\ngo 1.21\n")
+
+        # Create vendor directory
+        vendor_dir = temp_dir / "vendor"
+        vendor_dir.mkdir()
+
+        mock_run = mocker.patch("subprocess.run")
+        # First call (tidy) succeeds, second call (vendor) fails
+        tidy_result = mocker.Mock()
+        tidy_result.returncode = 0
+        tidy_result.stdout = ""
+        tidy_result.stderr = ""
+
+        vendor_result = mocker.Mock()
+        vendor_result.returncode = 1
+        vendor_result.stdout = ""
+        vendor_result.stderr = "error: inconsistent vendoring"
+
+        mock_run.side_effect = [tidy_result, vendor_result]
+
+        pm = GoPackageManager()
+        success, output = pm.regenerate_lock(go_mod, temp_dir)
+
+        assert success is False
+        assert "inconsistent" in output.lower()
+
 
 class TestGoPackageManagerVerifyBuild:
     """Tests for verify_build method."""

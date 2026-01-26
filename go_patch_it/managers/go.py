@@ -323,11 +323,14 @@ class GoPackageManager(PackageManager):
     ) -> Tuple[bool, str]:
         """
         Regenerate go.sum by running go mod tidy.
-        Also cleans up go.mod.
+        Also regenerates vendor directory if it exists.
         Returns (success: bool, output: str).
         """
         go_mod_dir = file_path.parent
+        all_output = ""
+
         try:
+            # Step 1: Run go mod tidy
             result = subprocess.run(
                 ["go", "mod", "tidy"],
                 cwd=str(go_mod_dir),
@@ -336,8 +339,26 @@ class GoPackageManager(PackageManager):
                 timeout=300,
             )
 
-            output = result.stdout + result.stderr
-            return result.returncode == 0, output
+            all_output += result.stdout + result.stderr
+            if result.returncode != 0:
+                return False, all_output
+
+            # Step 2: Run go mod vendor if vendor directory exists
+            vendor_dir = go_mod_dir / "vendor"
+            if vendor_dir.exists() and vendor_dir.is_dir():
+                vendor_result = subprocess.run(
+                    ["go", "mod", "vendor"],
+                    cwd=str(go_mod_dir),
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                )
+
+                all_output += vendor_result.stdout + vendor_result.stderr
+                if vendor_result.returncode != 0:
+                    return False, all_output
+
+            return True, all_output
         except subprocess.TimeoutExpired:
             return False, "Command timed out after 5 minutes"
         except FileNotFoundError:
