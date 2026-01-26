@@ -167,7 +167,7 @@ class TestBackupFiles:
         assert "package.json" in backup_paths
         assert backup_paths["package.json"].exists()
         assert backup_paths["package.json"].name == "package.json.old"
-        assert not package_json.exists()  # Original renamed
+        assert package_json.exists()
 
     def test_backup_package_lock(self, temp_dir):
         """Backup package-lock.json if exists."""
@@ -180,6 +180,31 @@ class TestBackupFiles:
 
         assert "package-lock.json" in backup_paths
         assert backup_paths["package-lock.json"].exists()
+
+    def test_backup_is_copy_not_move(self, temp_dir):
+        """Verify backup copies files instead of moving them.
+
+        This is critical: go commands (go mod edit, go mod tidy) require go.mod
+        to exist during the update process. If backup moves the file, these
+        commands fail with "cannot find main module" error.
+        """
+        go_mod = temp_dir / "go.mod"
+        original_content = "module test\n\ngo 1.21\n"
+        go_mod.write_text(original_content)
+
+        backup_paths = backup_files(go_mod)
+
+        # Original must still exist and be readable/writable
+        assert go_mod.exists(), "Original file must exist after backup (copy, not move)"
+        assert go_mod.read_text() == original_content
+
+        # Backup must also exist with same content
+        assert backup_paths["go.mod"].exists()
+        assert backup_paths["go.mod"].read_text() == original_content
+
+        # Original should still be modifiable (for go mod edit)
+        go_mod.write_text("module test-modified\n\ngo 1.21\n")
+        assert go_mod.read_text() != backup_paths["go.mod"].read_text()
 
     def test_backup_node_modules(self, temp_dir):
         """Backup node_modules directory if exists."""
@@ -207,7 +232,7 @@ class TestBackupFiles:
         assert "yarn.lock" in backup_paths
         assert backup_paths["yarn.lock"].exists()
         assert backup_paths["yarn.lock"].name == "yarn.lock.old"
-        assert not yarn_lock.exists()  # Original renamed
+        assert yarn_lock.exists()
 
 
 class TestRestoreFiles:
@@ -540,8 +565,8 @@ class TestBackupGoModFiles:
         assert "go.sum" in backup_paths
         assert backup_paths["go.mod"].name == "go.mod.old"
         assert backup_paths["go.sum"].name == "go.sum.old"
-        assert not go_mod.exists()
-        assert not go_sum.exists()
+        assert go_mod.exists()
+        assert go_sum.exists()
         assert backup_paths["go.mod"].exists()
         assert backup_paths["go.sum"].exists()
 
@@ -555,7 +580,7 @@ class TestBackupGoModFiles:
         assert "go.mod" in backup_paths
         assert "go.sum" not in backup_paths
         assert backup_paths["go.mod"].name == "go.mod.old"
-        assert not go_mod.exists()
+        assert go_mod.exists()
         assert backup_paths["go.mod"].exists()
 
 

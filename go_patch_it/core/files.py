@@ -38,14 +38,19 @@ def backup_files(file_path: Path) -> Dict[str, Path]:
     # Get list of files to backup from package manager
     backup_file_names = pm.get_backup_files(file_path)
 
-    # Backup each file
+    # Backup each file by copying (not moving, so originals remain for editing)
     for file_name in backup_file_names:
         file_to_backup = package_dir / file_name
         if file_to_backup.exists():
             backup_path = file_to_backup.with_suffix(file_to_backup.suffix + ".old")
             if file_to_backup.is_dir():
                 backup_path = package_dir / f"{file_name}.old"
-            file_to_backup.rename(backup_path)
+                # Remove existing backup directory if it exists
+                if backup_path.exists():
+                    shutil.rmtree(backup_path)
+                shutil.copytree(file_to_backup, backup_path)
+            else:
+                shutil.copy2(file_to_backup, backup_path)
             backup_paths[file_name] = backup_path
 
     return backup_paths
@@ -53,7 +58,8 @@ def backup_files(file_path: Path) -> Dict[str, Path]:
 
 def restore_files(backup_paths: Dict[str, Path]) -> None:
     """
-    Restore files from .old versions.
+    Restore files from .old backup versions by copying back to original location.
+    This overwrites any modifications made to the original files.
     """
     for original_name, backup_path in backup_paths.items():
         if not backup_path.exists():
@@ -65,15 +71,19 @@ def restore_files(backup_paths: Dict[str, Path]) -> None:
         else:
             original_path = backup_path.parent / original_name
 
-        # Restore file or directory
+        # Restore file or directory by copying from backup
         if backup_path.is_dir():
             if original_path.exists():
                 shutil.rmtree(original_path)
-            backup_path.rename(original_path)
+            shutil.copytree(backup_path, original_path)
+            # Remove the backup after successful restore
+            shutil.rmtree(backup_path)
         else:
             if original_path.exists():
                 original_path.unlink()
-            backup_path.rename(original_path)
+            shutil.copy2(backup_path, original_path)
+            # Remove the backup after successful restore
+            backup_path.unlink()
 
 
 def find_backup_files(repo_root: Path) -> List[Dict[str, Path]]:
