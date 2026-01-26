@@ -133,6 +133,8 @@ class TestCLIDefaultBehavior:
         """Test that no flags runs both generate and apply."""
         mock_generate = mocker.patch("go_patch_it.generate.main", return_value=0)
         mock_apply = mocker.patch("go_patch_it.apply.main", return_value=0)
+        # Mock post-apply scan to avoid package manager issues
+        mocker.patch("go_patch_it.cli._check_for_new_upgrades")
 
         main([])
 
@@ -234,6 +236,8 @@ class TestCLIReportCleanup:
         # Mock generate and apply to succeed
         mocker.patch("go_patch_it.generate.main", return_value=0)
         mocker.patch("go_patch_it.apply.main", return_value=0)
+        # Mock post-apply scan to avoid package manager issues
+        mocker.patch("go_patch_it.cli._check_for_new_upgrades")
 
         # Change to temp_dir so report files are found
         original_cwd = os.getcwd()
@@ -260,6 +264,8 @@ class TestCLIReportCleanup:
         # Mock generate and apply to succeed
         mocker.patch("go_patch_it.generate.main", return_value=0)
         mocker.patch("go_patch_it.apply.main", return_value=0)
+        # Mock post-apply scan to avoid package manager issues
+        mocker.patch("go_patch_it.cli._check_for_new_upgrades")
 
         original_cwd = os.getcwd()
         try:
@@ -336,6 +342,8 @@ class TestCLIReportCleanup:
         # Mock generate and apply to succeed
         mocker.patch("go_patch_it.generate.main", return_value=0)
         mocker.patch("go_patch_it.apply.main", return_value=0)
+        # Mock post-apply scan to avoid package manager issues
+        mocker.patch("go_patch_it.cli._check_for_new_upgrades")
 
         original_cwd = os.getcwd()
         try:
@@ -358,3 +366,114 @@ class TestCLIReportCleanup:
 
         output = captured_output.getvalue()
         assert "--keep-reports" in output
+
+
+class TestCLIPostApplyScan:
+    """Tests for post-apply scan feature."""
+
+    def test_post_apply_scan_called_after_successful_apply(self, temp_dir, mocker, capsys):
+        """Post-apply scan is called after successful generate+apply."""
+        import os
+
+        json_report = temp_dir / "patch-upgrades.json"
+        json_report.write_text("[]")
+
+        mocker.patch("go_patch_it.generate.main", return_value=0)
+        mocker.patch("go_patch_it.apply.main", return_value=0)
+
+        # Mock _post_apply_scan to return some upgrades
+        mocker.patch(
+            "go_patch_it.cli._post_apply_scan",
+            return_value=[
+                {"package": "test-pkg", "current": "v1.0.0", "proposed": "v1.0.1"},
+            ],
+        )
+
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(temp_dir)
+            exit_code = main([])
+        finally:
+            os.chdir(original_cwd)
+
+        assert exit_code == 0
+        captured = capsys.readouterr()
+        assert "Checking for new upgrade opportunities" in captured.out
+        assert "Found 1 new patch upgrade(s)" in captured.out
+        assert "test-pkg" in captured.out
+        assert "Run go-patch-it again" in captured.out
+
+    def test_post_apply_scan_no_new_upgrades(self, temp_dir, mocker, capsys):
+        """Post-apply scan shows no upgrades when all are up to date."""
+        import os
+
+        json_report = temp_dir / "patch-upgrades.json"
+        json_report.write_text("[]")
+
+        mocker.patch("go_patch_it.generate.main", return_value=0)
+        mocker.patch("go_patch_it.apply.main", return_value=0)
+
+        # Mock _post_apply_scan to return empty list
+        mocker.patch("go_patch_it.cli._post_apply_scan", return_value=[])
+
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(temp_dir)
+            exit_code = main([])
+        finally:
+            os.chdir(original_cwd)
+
+        assert exit_code == 0
+        captured = capsys.readouterr()
+        assert "Checking for new upgrade opportunities" in captured.out
+        assert "No additional patch upgrades found" in captured.out
+
+    def test_post_apply_scan_not_called_on_apply_only(self, temp_dir, mocker):
+        """Post-apply scan is not called when only --apply is used."""
+        import os
+
+        json_report = temp_dir / "patch-upgrades.json"
+        json_report.write_text("[]")
+
+        mocker.patch("go_patch_it.apply.main", return_value=0)
+        mock_check = mocker.patch("go_patch_it.cli._check_for_new_upgrades")
+
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(temp_dir)
+            main(["--apply", str(json_report)])
+        finally:
+            os.chdir(original_cwd)
+
+        mock_check.assert_not_called()
+
+    def test_post_apply_scan_shows_limited_upgrades(self, temp_dir, mocker, capsys):
+        """Post-apply scan shows first 5 upgrades and indicates more."""
+        import os
+
+        json_report = temp_dir / "patch-upgrades.json"
+        json_report.write_text("[]")
+
+        mocker.patch("go_patch_it.generate.main", return_value=0)
+        mocker.patch("go_patch_it.apply.main", return_value=0)
+
+        # Mock _post_apply_scan to return many upgrades
+        mocker.patch(
+            "go_patch_it.cli._post_apply_scan",
+            return_value=[
+                {"package": f"pkg-{i}", "current": "v1.0.0", "proposed": "v1.0.1"} for i in range(8)
+            ],
+        )
+
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(temp_dir)
+            main([])
+        finally:
+            os.chdir(original_cwd)
+
+        captured = capsys.readouterr()
+        assert "Found 8 new patch upgrade(s)" in captured.out
+        assert "pkg-0" in captured.out
+        assert "pkg-4" in captured.out
+        assert "... and 3 more" in captured.out
