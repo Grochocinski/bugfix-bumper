@@ -32,9 +32,13 @@ class TestGitignoreHandling:
         content = exclude_file.read_text()
         assert "*.old" in content
         assert "node_modules.old/" in content
-        assert len(added) == 2
+        assert "patch-upgrades.json" in content
+        assert "patch-upgrades-summary.md" in content
+        assert len(added) == 4
         assert "*.old" in added
         assert "node_modules.old/" in added
+        assert "patch-upgrades.json" in added
+        assert "patch-upgrades-summary.md" in added
 
     def test_add_gitignore_patterns_adds_to_existing_exclude(self, git_exclude_file):
         """add_gitignore_patterns adds to existing exclude file."""
@@ -49,22 +53,28 @@ class TestGitignoreHandling:
         assert "custom-pattern" in content
         assert "*.old" in content
         assert "node_modules.old/" in content
-        assert len(added) == 2
+        assert "patch-upgrades.json" in content
+        assert "patch-upgrades-summary.md" in content
+        assert len(added) == 4
 
     def test_add_gitignore_patterns_skips_duplicates(self, git_exclude_file):
         """add_gitignore_patterns skips patterns that already exist."""
         git_repo_dir = git_exclude_file.parent.parent.parent
-        git_exclude_file.write_text("*.old\n")
+        git_exclude_file.write_text("*.old\npatch-upgrades.json\n")
 
         added = add_gitignore_patterns(git_repo_dir)
 
         content = git_exclude_file.read_text()
-        # Count occurrences of *.old
+        # Count occurrences of existing patterns
         assert content.count("*.old") == 1
+        assert content.count("patch-upgrades.json") == 1
         assert "node_modules.old/" in content
-        assert len(added) == 1
+        assert "patch-upgrades-summary.md" in content
+        assert len(added) == 2
         assert "node_modules.old/" in added
+        assert "patch-upgrades-summary.md" in added
         assert "*.old" not in added
+        assert "patch-upgrades.json" not in added
 
     def test_add_gitignore_patterns_skips_when_not_git_repo(self, temp_dir):
         """add_gitignore_patterns returns empty list when not in git repo."""

@@ -28,7 +28,12 @@ def add_gitignore_patterns(repo_root: Path) -> List[str]:
     if not is_git_repo(repo_root):
         return []
 
-    patterns_to_add = ["*.old", "node_modules.old/"]
+    patterns_to_add = [
+        "*.old",
+        "node_modules.old/",
+        "patch-upgrades.json",
+        "patch-upgrades-summary.md",
+    ]
     exclude_file = repo_root / ".git" / "info" / "exclude"
 
     try:
