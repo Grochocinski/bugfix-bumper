@@ -477,3 +477,154 @@ class TestCLIPostApplyScan:
         assert "pkg-0" in captured.out
         assert "pkg-4" in captured.out
         assert "... and 3 more" in captured.out
+
+
+class TestPostApplyScanFunction:
+    """Direct tests for _post_apply_scan function."""
+
+    def test_post_apply_scan_no_files_found(self, temp_dir, mocker):
+        """Returns empty list when no package files are found."""
+        from go_patch_it.cli import _post_apply_scan
+
+        # Mock package manager that returns no files
+        mock_pm = mocker.MagicMock()
+        mock_pm.find_files.return_value = []
+        mocker.patch("go_patch_it.core.package_manager.get_package_manager", return_value=mock_pm)
+
+        result = _post_apply_scan(temp_dir, [])
+
+        assert result == []
+
+    def test_post_apply_scan_with_files(self, temp_dir, mocker):
+        """Returns upgrades when files are found and processed."""
+        from go_patch_it.cli import _post_apply_scan
+
+        # Create a mock package manager
+        mock_pm = mocker.MagicMock()
+        mock_file = temp_dir / "go.mod"
+        mock_file.write_text("module test")
+        mock_pm.find_files.return_value = [mock_file]
+        mocker.patch("go_patch_it.core.package_manager.get_package_manager", return_value=mock_pm)
+
+        # Mock process_file to return upgrades
+        mock_upgrade = {"package": "test/pkg", "current": "v1.0.0", "proposed": "v1.0.1"}
+        mocker.patch("go_patch_it.core.processing.process_file", return_value=[mock_upgrade])
+
+        # Mock cache
+        mock_cache = mocker.MagicMock()
+        mocker.patch("go_patch_it.core.cache.PackageCache", return_value=mock_cache)
+
+        result = _post_apply_scan(temp_dir, [])
+
+        assert len(result) == 1
+        assert result[0]["package"] == "test/pkg"
+        mock_cache.save.assert_called_once()
+
+    def test_post_apply_scan_parses_package_manager_arg(self, temp_dir, mocker):
+        """Parses -p/--package-manager argument correctly."""
+        from go_patch_it.cli import _post_apply_scan
+
+        mock_pm = mocker.MagicMock()
+        mock_pm.find_files.return_value = []
+        mock_get_pm = mocker.patch(
+            "go_patch_it.core.package_manager.get_package_manager", return_value=mock_pm
+        )
+
+        _post_apply_scan(temp_dir, ["-p", "go"])
+        mock_get_pm.assert_called_with(temp_dir, "go")
+
+        _post_apply_scan(temp_dir, ["--package-manager", "yarn"])
+        mock_get_pm.assert_called_with(temp_dir, "yarn")
+
+    def test_post_apply_scan_processes_multiple_files(self, temp_dir, mocker):
+        """Processes multiple files and aggregates upgrades."""
+        from go_patch_it.cli import _post_apply_scan
+
+        mock_pm = mocker.MagicMock()
+        file1 = temp_dir / "go.mod"
+        file2 = temp_dir / "sub" / "go.mod"
+        file1.write_text("module test1")
+        (temp_dir / "sub").mkdir()
+        file2.write_text("module test2")
+        mock_pm.find_files.return_value = [file1, file2]
+        mocker.patch("go_patch_it.core.package_manager.get_package_manager", return_value=mock_pm)
+
+        # Return different upgrades for each file
+        mocker.patch(
+            "go_patch_it.core.processing.process_file",
+            side_effect=[
+                [{"package": "pkg1", "current": "v1.0.0", "proposed": "v1.0.1"}],
+                [{"package": "pkg2", "current": "v2.0.0", "proposed": "v2.0.1"}],
+            ],
+        )
+
+        mock_cache = mocker.MagicMock()
+        mocker.patch("go_patch_it.core.cache.PackageCache", return_value=mock_cache)
+
+        result = _post_apply_scan(temp_dir, [])
+
+        assert len(result) == 2
+        assert result[0]["package"] == "pkg1"
+        assert result[1]["package"] == "pkg2"
+
+
+class TestCheckForNewUpgradesFunction:
+    """Direct tests for _check_for_new_upgrades function."""
+
+    def test_check_for_new_upgrades_with_upgrades(self, temp_dir, mocker, capsys):
+        """Prints upgrades and suggestion when upgrades found."""
+        from go_patch_it.cli import _check_for_new_upgrades
+
+        mocker.patch(
+            "go_patch_it.cli._post_apply_scan",
+            return_value=[
+                {"package": "pkg1", "current": "v1.0.0", "proposed": "v1.0.1"},
+                {"package": "pkg2", "current": "v2.0.0", "proposed": "v2.0.1"},
+            ],
+        )
+
+        _check_for_new_upgrades(temp_dir, [])
+
+        captured = capsys.readouterr()
+        assert "Checking for new upgrade opportunities" in captured.out
+        assert "Found 2 new patch upgrade(s)" in captured.out
+        assert "pkg1" in captured.out
+        assert "pkg2" in captured.out
+        assert "Run go-patch-it again" in captured.out
+
+    def test_check_for_new_upgrades_no_upgrades(self, temp_dir, mocker, capsys):
+        """Prints all up to date message when no upgrades found."""
+        from go_patch_it.cli import _check_for_new_upgrades
+
+        mocker.patch("go_patch_it.cli._post_apply_scan", return_value=[])
+
+        _check_for_new_upgrades(temp_dir, [])
+
+        captured = capsys.readouterr()
+        assert "Checking for new upgrade opportunities" in captured.out
+        assert "No additional patch upgrades found" in captured.out
+        assert "All dependencies are up to date" in captured.out
+
+    def test_check_for_new_upgrades_truncates_at_five(self, temp_dir, mocker, capsys):
+        """Shows only first 5 upgrades and indicates remaining count."""
+        from go_patch_it.cli import _check_for_new_upgrades
+
+        mocker.patch(
+            "go_patch_it.cli._post_apply_scan",
+            return_value=[
+                {"package": f"pkg-{i}", "current": "v1.0.0", "proposed": "v1.0.1"} for i in range(7)
+            ],
+        )
+
+        _check_for_new_upgrades(temp_dir, [])
+
+        captured = capsys.readouterr()
+        assert "Found 7 new patch upgrade(s)" in captured.out
+        # First 5 should be shown
+        assert "pkg-0" in captured.out
+        assert "pkg-4" in captured.out
+        # 6th should not be shown directly
+        assert "pkg-5" not in captured.out
+        assert "pkg-6" not in captured.out
+        # Should indicate remaining
+        assert "... and 2 more" in captured.out
