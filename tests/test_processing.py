@@ -1183,3 +1183,485 @@ class TestApplyUpgradesDryRun:
         assert "jest" in output
         assert "^29.0.0" in output
         assert "^29.0.5" in output
+
+
+class TestIsYarnWorkspace:
+    """Tests for _is_yarn_workspace detection."""
+
+    def test_detects_yarn_workspace(self, temp_dir):
+        """Detects yarn workspace from root package.json."""
+        from go_patch_it.core.processing import _is_yarn_workspace
+
+        package_json = temp_dir / "package.json"
+        package_json.write_text(json.dumps({"name": "monorepo", "workspaces": ["packages/*"]}))
+
+        assert _is_yarn_workspace(temp_dir) is True
+
+    def test_not_workspace_without_workspaces_key(self, temp_dir):
+        """Not a workspace if no workspaces key."""
+        from go_patch_it.core.processing import _is_yarn_workspace
+
+        package_json = temp_dir / "package.json"
+        package_json.write_text(
+            json.dumps({"name": "regular-package", "dependencies": {"express": "^4.18.0"}})
+        )
+
+        assert _is_yarn_workspace(temp_dir) is False
+
+    def test_not_workspace_without_package_json(self, temp_dir):
+        """Not a workspace if no package.json exists."""
+        from go_patch_it.core.processing import _is_yarn_workspace
+
+        assert _is_yarn_workspace(temp_dir) is False
+
+    def test_not_workspace_with_invalid_json(self, temp_dir):
+        """Not a workspace if package.json is invalid JSON."""
+        from go_patch_it.core.processing import _is_yarn_workspace
+
+        package_json = temp_dir / "package.json"
+        package_json.write_text("{ invalid json }")
+
+        assert _is_yarn_workspace(temp_dir) is False
+
+
+class TestApplyYarnWorkspaceUpgrades:
+    """Tests for yarn workspace batched upgrade flow."""
+
+    def test_batch_updates_multiple_packages(self, temp_dir, mocker, capsys):
+        """Updates multiple package.json files, regenerates yarn.lock once."""
+        # Create yarn workspace structure
+        root_pkg = temp_dir / "package.json"
+        root_pkg.write_text(
+            json.dumps(
+                {
+                    "name": "monorepo",
+                    "workspaces": ["packages/*"],
+                    "devDependencies": {"jest": "^29.0.0"},
+                },
+                indent=2,
+            )
+        )
+
+        pkg_a_dir = temp_dir / "packages" / "pkg-a"
+        pkg_a_dir.mkdir(parents=True)
+        pkg_a = pkg_a_dir / "package.json"
+        pkg_a.write_text(
+            json.dumps({"name": "pkg-a", "dependencies": {"express": "^4.18.1"}}, indent=2)
+        )
+
+        pkg_b_dir = temp_dir / "packages" / "pkg-b"
+        pkg_b_dir.mkdir(parents=True)
+        pkg_b = pkg_b_dir / "package.json"
+        pkg_b.write_text(
+            json.dumps({"name": "pkg-b", "dependencies": {"lodash": "^4.17.20"}}, indent=2)
+        )
+
+        yarn_lock = temp_dir / "yarn.lock"
+        yarn_lock.write_text("# yarn lockfile v1\n")
+
+        upgrades = [
+            {
+                "package": "jest",
+                "location": "package.json",
+                "type": "devDependencies",
+                "current": "^29.0.0",
+                "proposed": "^29.0.5",
+            },
+            {
+                "package": "express",
+                "location": "packages/pkg-a/package.json",
+                "type": "dependencies",
+                "current": "^4.18.1",
+                "proposed": "^4.18.3",
+            },
+            {
+                "package": "lodash",
+                "location": "packages/pkg-b/package.json",
+                "type": "dependencies",
+                "current": "^4.17.20",
+                "proposed": "^4.17.21",
+            },
+        ]
+
+        # Mock yarn commands
+        mocker.patch(
+            "go_patch_it.managers.npm_yarn.YarnPackageManager.regenerate_lock",
+            return_value=(True, ""),
+        )
+        mocker.patch(
+            "go_patch_it.managers.npm_yarn.YarnPackageManager.verify_build",
+            return_value=(True, ""),
+        )
+
+        apply_upgrades(temp_dir, upgrades, create_backups=False)
+
+        # Verify all package.json files were updated
+        root_data = json.loads(root_pkg.read_text())
+        assert root_data["devDependencies"]["jest"] == "^29.0.5"
+
+        pkg_a_data = json.loads(pkg_a.read_text())
+        assert pkg_a_data["dependencies"]["express"] == "^4.18.3"
+
+        pkg_b_data = json.loads(pkg_b.read_text())
+        assert pkg_b_data["dependencies"]["lodash"] == "^4.17.21"
+
+        # Verify backups were cleaned up
+        assert not (temp_dir / "package.json.old").exists()
+        assert not (temp_dir / "yarn.lock.old").exists()
+
+        captured = capsys.readouterr()
+        assert "Phase 1" in captured.out
+        assert "Phase 2" in captured.out
+        assert "Phase 3" in captured.out
+        assert "Build successful" in captured.out
+
+    def test_rollback_on_regenerate_failure(self, temp_dir, mocker, capsys):
+        """Restores all files if yarn install fails."""
+        # Create yarn workspace
+        root_pkg = temp_dir / "package.json"
+        original_content = json.dumps(
+            {
+                "name": "monorepo",
+                "workspaces": ["packages/*"],
+                "dependencies": {"express": "^4.18.1"},
+            },
+            indent=2,
+        )
+        root_pkg.write_text(original_content)
+
+        yarn_lock = temp_dir / "yarn.lock"
+        original_lock = "# original yarn lockfile\n"
+        yarn_lock.write_text(original_lock)
+
+        upgrades = [
+            {
+                "package": "express",
+                "location": "package.json",
+                "type": "dependencies",
+                "current": "^4.18.1",
+                "proposed": "^4.18.3",
+            },
+        ]
+
+        # Mock yarn install to fail
+        mocker.patch(
+            "go_patch_it.managers.npm_yarn.YarnPackageManager.regenerate_lock",
+            return_value=(False, "error: cannot resolve dependencies"),
+        )
+
+        apply_upgrades(temp_dir, upgrades, create_backups=False)
+
+        # Verify files were restored
+        assert json.loads(root_pkg.read_text())["dependencies"]["express"] == "^4.18.1"
+        assert yarn_lock.read_text() == original_lock
+
+        # Verify backups were cleaned up after restore
+        assert not (temp_dir / "package.json.old").exists()
+        assert not (temp_dir / "yarn.lock.old").exists()
+
+        captured = capsys.readouterr()
+        assert "Failed to regenerate yarn.lock" in captured.err
+        assert "Restoring all files" in captured.out
+
+    def test_rollback_on_verify_failure(self, temp_dir, mocker, capsys):
+        """Restores all files if yarn install --frozen-lockfile fails."""
+        root_pkg = temp_dir / "package.json"
+        original_content = json.dumps(
+            {
+                "name": "monorepo",
+                "workspaces": ["packages/*"],
+                "dependencies": {"express": "^4.18.1"},
+            },
+            indent=2,
+        )
+        root_pkg.write_text(original_content)
+
+        yarn_lock = temp_dir / "yarn.lock"
+        original_lock = "# original yarn lockfile\n"
+        yarn_lock.write_text(original_lock)
+
+        upgrades = [
+            {
+                "package": "express",
+                "location": "package.json",
+                "type": "dependencies",
+                "current": "^4.18.1",
+                "proposed": "^4.18.3",
+            },
+        ]
+
+        # Mock regenerate to succeed, verify to fail
+        mocker.patch(
+            "go_patch_it.managers.npm_yarn.YarnPackageManager.regenerate_lock",
+            return_value=(True, ""),
+        )
+        mocker.patch(
+            "go_patch_it.managers.npm_yarn.YarnPackageManager.verify_build",
+            return_value=(False, "error: lockfile would change"),
+        )
+
+        apply_upgrades(temp_dir, upgrades, create_backups=False)
+
+        # Verify files were restored
+        assert json.loads(root_pkg.read_text())["dependencies"]["express"] == "^4.18.1"
+        assert yarn_lock.read_text() == original_lock
+
+        captured = capsys.readouterr()
+        assert "Build verification failed" in captured.err
+        assert "Restoring all files" in captured.out
+
+    def test_keeps_backups_when_requested(self, temp_dir, mocker):
+        """Keeps backup files when create_backups=True."""
+        root_pkg = temp_dir / "package.json"
+        root_pkg.write_text(
+            json.dumps(
+                {
+                    "name": "monorepo",
+                    "workspaces": ["packages/*"],
+                    "dependencies": {"express": "^4.18.1"},
+                },
+                indent=2,
+            )
+        )
+
+        yarn_lock = temp_dir / "yarn.lock"
+        yarn_lock.write_text("# yarn lockfile v1\n")
+
+        upgrades = [
+            {
+                "package": "express",
+                "location": "package.json",
+                "type": "dependencies",
+                "current": "^4.18.1",
+                "proposed": "^4.18.3",
+            },
+        ]
+
+        mocker.patch(
+            "go_patch_it.managers.npm_yarn.YarnPackageManager.regenerate_lock",
+            return_value=(True, ""),
+        )
+        mocker.patch(
+            "go_patch_it.managers.npm_yarn.YarnPackageManager.verify_build",
+            return_value=(True, ""),
+        )
+
+        apply_upgrades(temp_dir, upgrades, create_backups=True)
+
+        # Verify backups were kept
+        assert (temp_dir / "package.json.old").exists()
+        assert (temp_dir / "yarn.lock.old").exists()
+
+    def test_dry_run_no_changes(self, temp_dir, mocker, capsys):
+        """Dry run shows what would change without modifying files."""
+        root_pkg = temp_dir / "package.json"
+        original_content = json.dumps(
+            {
+                "name": "monorepo",
+                "workspaces": ["packages/*"],
+                "dependencies": {"express": "^4.18.1"},
+            },
+            indent=2,
+        )
+        root_pkg.write_text(original_content)
+
+        yarn_lock = temp_dir / "yarn.lock"
+        original_lock = "# yarn lockfile v1\n"
+        yarn_lock.write_text(original_lock)
+
+        upgrades = [
+            {
+                "package": "express",
+                "location": "package.json",
+                "type": "dependencies",
+                "current": "^4.18.1",
+                "proposed": "^4.18.3",
+            },
+        ]
+
+        # These should NOT be called in dry-run
+        mock_regen = mocker.patch(
+            "go_patch_it.managers.npm_yarn.YarnPackageManager.regenerate_lock"
+        )
+        mock_verify = mocker.patch("go_patch_it.managers.npm_yarn.YarnPackageManager.verify_build")
+
+        apply_upgrades(temp_dir, upgrades, create_backups=False, dry_run=True)
+
+        # Verify no files were modified
+        assert root_pkg.read_text() == original_content
+        assert yarn_lock.read_text() == original_lock
+
+        # Verify yarn commands were not called
+        mock_regen.assert_not_called()
+        mock_verify.assert_not_called()
+
+        # Verify no backups created
+        assert not (temp_dir / "package.json.old").exists()
+        assert not (temp_dir / "yarn.lock.old").exists()
+
+        captured = capsys.readouterr()
+        assert "DRY RUN" in captured.out
+        assert "express" in captured.out
+        assert "^4.18.1" in captured.out
+        assert "^4.18.3" in captured.out
+
+    def test_uses_original_flow_for_go_mod(self, temp_dir, mocker):
+        """Falls back to original flow when go.mod files are present."""
+        # Create a go.mod file (not yarn workspace)
+        go_mod = temp_dir / "go.mod"
+        go_mod.write_text("module test\n\ngo 1.21\n\nrequire github.com/gin-gonic/gin v1.9.1\n")
+
+        upgrades = [
+            {
+                "package": "github.com/gin-gonic/gin",
+                "location": "go.mod",
+                "type": "require",
+                "current": "v1.9.1",
+                "proposed": "v1.9.2",
+            }
+        ]
+
+        # Mock go commands
+        mocker.patch(
+            "go_patch_it.core.processing.backup_files",
+            return_value={"go.mod": temp_dir / "go.mod.old"},
+        )
+        (temp_dir / "go.mod.old").write_text(go_mod.read_text())
+        mocker.patch(
+            "go_patch_it.managers.go.GoPackageManager.update_file",
+            return_value=(True, ""),
+        )
+        mocker.patch(
+            "go_patch_it.managers.go.GoPackageManager.regenerate_lock",
+            return_value=(True, ""),
+        )
+        mocker.patch(
+            "go_patch_it.managers.go.GoPackageManager.verify_build",
+            return_value=(True, ""),
+        )
+
+        # Should not crash and should use original flow
+        apply_upgrades(temp_dir, upgrades, create_backups=False)
+
+    def test_uses_original_flow_for_non_workspace_npm(self, temp_dir, mocker, capsys):
+        """Falls back to original flow for npm packages without workspaces."""
+        # Create non-workspace package.json
+        package_json = temp_dir / "package.json"
+        package_json.write_text(
+            json.dumps(
+                {"name": "regular-package", "dependencies": {"express": "^4.18.1"}}, indent=2
+            )
+        )
+
+        upgrades = [
+            {
+                "package": "express",
+                "location": "package.json",
+                "type": "dependencies",
+                "current": "^4.18.1",
+                "proposed": "^4.18.3",
+            },
+        ]
+
+        # Mock for original flow
+        mocker.patch(
+            "go_patch_it.core.processing.backup_files",
+            return_value={"package.json": temp_dir / "package.json.old"},
+        )
+        (temp_dir / "package.json.old").write_text(package_json.read_text())
+
+        mock_pm = mocker.Mock()
+        mock_pm.name = "npm"
+        mock_pm.regenerate_lock.return_value = (True, "")
+        mock_pm.verify_build.return_value = (True, "")
+        mocker.patch(
+            "go_patch_it.core.package_manager.get_package_manager_for_location",
+            return_value=mock_pm,
+        )
+
+        apply_upgrades(temp_dir, upgrades, create_backups=False)
+
+        # Verify original flow was used (no "Phase" output)
+        captured = capsys.readouterr()
+        assert "Phase 1" not in captured.out
+
+    def test_handles_missing_package_json(self, temp_dir, mocker, capsys):
+        """Handles gracefully when a package.json doesn't exist."""
+        root_pkg = temp_dir / "package.json"
+        root_pkg.write_text(
+            json.dumps(
+                {
+                    "name": "monorepo",
+                    "workspaces": ["packages/*"],
+                    "dependencies": {"express": "^4.18.1"},
+                },
+                indent=2,
+            )
+        )
+
+        yarn_lock = temp_dir / "yarn.lock"
+        yarn_lock.write_text("# yarn lockfile v1\n")
+
+        upgrades = [
+            {
+                "package": "express",
+                "location": "package.json",
+                "type": "dependencies",
+                "current": "^4.18.1",
+                "proposed": "^4.18.3",
+            },
+            {
+                "package": "lodash",
+                "location": "packages/missing/package.json",  # Doesn't exist
+                "type": "dependencies",
+                "current": "^4.17.20",
+                "proposed": "^4.17.21",
+            },
+        ]
+
+        mocker.patch(
+            "go_patch_it.managers.npm_yarn.YarnPackageManager.regenerate_lock",
+            return_value=(True, ""),
+        )
+        mocker.patch(
+            "go_patch_it.managers.npm_yarn.YarnPackageManager.verify_build",
+            return_value=(True, ""),
+        )
+
+        apply_upgrades(temp_dir, upgrades, create_backups=False)
+
+        # Should still update the existing package.json
+        root_data = json.loads(root_pkg.read_text())
+        assert root_data["dependencies"]["express"] == "^4.18.3"
+
+        captured = capsys.readouterr()
+        assert "not found" in captured.err
+
+    def test_no_updates_needed(self, temp_dir, capsys):
+        """Handles case where no package.json files need updating."""
+        root_pkg = temp_dir / "package.json"
+        root_pkg.write_text(
+            json.dumps(
+                {
+                    "name": "monorepo",
+                    "workspaces": ["packages/*"],
+                    "dependencies": {},  # Empty dependencies
+                },
+                indent=2,
+            )
+        )
+
+        upgrades = [
+            {
+                "package": "express",  # Not in dependencies
+                "location": "package.json",
+                "type": "dependencies",
+                "current": "^4.18.1",
+                "proposed": "^4.18.3",
+            },
+        ]
+
+        apply_upgrades(temp_dir, upgrades, create_backups=False)
+
+        captured = capsys.readouterr()
+        assert "No files were updated" in captured.out
