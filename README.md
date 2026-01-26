@@ -1,7 +1,7 @@
 # go-patch-it
 
 ![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)
-![CI/CD Status](https://github.com/Grochocinski/go-patch-it/actions/workflows/test.yml/badge.svg)
+![CI/CD Status](https://github.com/Grochocinski/go-patch-it/actions/workflows/ci.yml/badge.svg)
 ![License](https://img.shields.io/github/license/Grochocinski/go-patch-it)
 ![Development Status](https://img.shields.io/badge/development%20status-beta-blue)
 
