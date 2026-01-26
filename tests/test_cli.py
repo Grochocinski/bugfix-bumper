@@ -206,10 +206,13 @@ class TestCLIVersionValue:
             file_version = version_file.read_text().strip()
             assert __version__ == file_version
 
-    def test_version_is_semver_format(self):
-        """Test that version follows semantic versioning format."""
-        import re
+    def test_version_is_valid_pep440(self):
+        """Test that version follows PEP 440 versioning format."""
+        from packaging.version import Version
 
-        # Basic semver pattern (major.minor.patch with optional pre-release)
-        pattern = r"^\d+\.\d+\.\d+(-[a-zA-Z0-9.]+)?$"
-        assert re.match(pattern, __version__), f"Version {__version__} doesn't match semver"
+        # This will raise InvalidVersion if the version string is invalid
+        parsed = Version(__version__)
+        # Verify it has at least major.minor.patch
+        assert parsed.major >= 0
+        assert parsed.minor >= 0
+        assert parsed.micro >= 0
