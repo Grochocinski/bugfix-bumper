@@ -1,6 +1,6 @@
 """go-patch-it package for managing Go module and npm/yarn package patch version upgrades."""
 
-from pathlib import Path
+from importlib.metadata import version
 
 # Core classes and utilities
 from go_patch_it.core.cache import PackageCache
@@ -22,15 +22,7 @@ from go_patch_it.managers import (
     YarnPackageManager,
 )
 
-
-# Version management
-def _get_version():
-    """Read version from VERSION file."""
-    version_file = Path(__file__).parent.parent / "VERSION"
-    return version_file.read_text().strip()
-
-
-__version__ = _get_version()
+__version__ = version("go-patch-it")
 
 __all__ = [
     "GoPackageManager",
