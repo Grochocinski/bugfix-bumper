@@ -216,3 +216,145 @@ class TestCLIVersionValue:
         assert parsed.major >= 0
         assert parsed.minor >= 0
         assert parsed.micro >= 0
+
+
+class TestCLIReportCleanup:
+    """Tests for report file cleanup after apply."""
+
+    def test_cleans_up_reports_by_default(self, temp_dir, mocker):
+        """Report files are deleted after successful apply by default."""
+        import os
+
+        # Create report files
+        json_report = temp_dir / "patch-upgrades.json"
+        md_report = temp_dir / "patch-upgrades-summary.md"
+        json_report.write_text("[]")
+        md_report.write_text("# Summary")
+
+        # Mock generate and apply to succeed
+        mocker.patch("go_patch_it.generate.main", return_value=0)
+        mocker.patch("go_patch_it.apply.main", return_value=0)
+
+        # Change to temp_dir so report files are found
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(temp_dir)
+            exit_code = main([])
+        finally:
+            os.chdir(original_cwd)
+
+        assert exit_code == 0
+        assert not json_report.exists(), "JSON report should be deleted"
+        assert not md_report.exists(), "MD report should be deleted"
+
+    def test_keeps_reports_with_flag(self, temp_dir, mocker):
+        """Report files are kept when --keep-reports is specified."""
+        import os
+
+        # Create report files
+        json_report = temp_dir / "patch-upgrades.json"
+        md_report = temp_dir / "patch-upgrades-summary.md"
+        json_report.write_text("[]")
+        md_report.write_text("# Summary")
+
+        # Mock generate and apply to succeed
+        mocker.patch("go_patch_it.generate.main", return_value=0)
+        mocker.patch("go_patch_it.apply.main", return_value=0)
+
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(temp_dir)
+            exit_code = main(["--keep-reports"])
+        finally:
+            os.chdir(original_cwd)
+
+        assert exit_code == 0
+        assert json_report.exists(), "JSON report should be kept"
+        assert md_report.exists(), "MD report should be kept"
+
+    def test_no_cleanup_on_apply_failure(self, temp_dir, mocker):
+        """Report files are kept if apply fails."""
+        import os
+
+        # Create report files
+        json_report = temp_dir / "patch-upgrades.json"
+        md_report = temp_dir / "patch-upgrades-summary.md"
+        json_report.write_text("[]")
+        md_report.write_text("# Summary")
+
+        # Mock generate to succeed, apply to fail
+        mocker.patch("go_patch_it.generate.main", return_value=0)
+        mocker.patch("go_patch_it.apply.main", return_value=1)
+
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(temp_dir)
+            exit_code = main([])
+        finally:
+            os.chdir(original_cwd)
+
+        assert exit_code == 1
+        assert json_report.exists(), "JSON report should be kept on failure"
+        assert md_report.exists(), "MD report should be kept on failure"
+
+    def test_no_cleanup_on_generate_only(self, temp_dir, mocker):
+        """Report files are kept when only --generate is run."""
+        import os
+
+        # Create report files
+        json_report = temp_dir / "patch-upgrades.json"
+        md_report = temp_dir / "patch-upgrades-summary.md"
+        json_report.write_text("[]")
+        md_report.write_text("# Summary")
+
+        # Mock generate to succeed
+        mocker.patch("go_patch_it.generate.main", return_value=0)
+
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(temp_dir)
+            exit_code = main(["--generate"])
+        finally:
+            os.chdir(original_cwd)
+
+        assert exit_code == 0
+        assert json_report.exists(), "JSON report should be kept for --generate only"
+        assert md_report.exists(), "MD report should be kept for --generate only"
+
+    def test_cleanup_with_custom_output_dir(self, temp_dir, mocker):
+        """Report files are cleaned up from custom output directory."""
+        import os
+
+        # Create output directory
+        output_dir = temp_dir / "reports"
+        output_dir.mkdir()
+        json_report = output_dir / "patch-upgrades.json"
+        md_report = output_dir / "patch-upgrades-summary.md"
+        json_report.write_text("[]")
+        md_report.write_text("# Summary")
+
+        # Mock generate and apply to succeed
+        mocker.patch("go_patch_it.generate.main", return_value=0)
+        mocker.patch("go_patch_it.apply.main", return_value=0)
+
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(temp_dir)
+            exit_code = main(["--output-dir", str(output_dir)])
+        finally:
+            os.chdir(original_cwd)
+
+        assert exit_code == 0
+        assert not json_report.exists(), "JSON report should be deleted"
+        assert not md_report.exists(), "MD report should be deleted"
+
+    def test_help_includes_keep_reports(self):
+        """Help message includes --keep-reports option."""
+        from io import StringIO
+
+        captured_output = StringIO()
+        with patch("sys.stdout", captured_output):
+            main(["--help"])
+
+        output = captured_output.getvalue()
+        assert "--keep-reports" in output

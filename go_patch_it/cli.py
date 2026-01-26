@@ -6,10 +6,12 @@ Supports:
     --version      Print version and exit
     --generate     Run only generate (create upgrade report)
     --apply        Run only apply (apply upgrades from report)
+    --keep-reports Keep report files after successful apply (default: delete)
     (no flags)     Run both generate and apply
 """
 
 import sys
+from pathlib import Path
 from typing import List, Optional
 
 
@@ -41,6 +43,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     # Determine which commands to run
     run_generate = False
     run_apply = False
+    keep_reports = False
 
     # Parse our flags and collect remaining args for subcommands
     remaining_args = []
@@ -51,6 +54,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             run_generate = True
         elif arg == "--apply":
             run_apply = True
+        elif arg == "--keep-reports":
+            keep_reports = True
         else:
             remaining_args.append(arg)
         i += 1
@@ -63,6 +68,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     # Import here to avoid circular imports
     from go_patch_it.apply import main as apply_main
     from go_patch_it.generate import main as generate_main
+
+    # Determine output directory for report files
+    output_dir = Path.cwd()
+    for j, arg in enumerate(remaining_args):
+        if arg in ("-o", "--output-dir") and j + 1 < len(remaining_args):
+            output_dir = Path(remaining_args[j + 1])
+            break
+
+    json_report = output_dir / "patch-upgrades.json"
+    md_report = output_dir / "patch-upgrades-summary.md"
 
     # Run generate if requested
     if run_generate:
@@ -82,12 +97,26 @@ def main(argv: Optional[List[str]] = None) -> int:
         apply_args = remaining_args.copy()
         if run_generate and not any(arg.endswith(".json") for arg in apply_args):
             # Add default upgrades file if not specified
-            apply_args.append("patch-upgrades.json")
+            apply_args.append(str(json_report))
         exit_code = apply_main(apply_args)
         if exit_code != 0:
             return exit_code
 
+        # Clean up report files after successful apply (unless --keep-reports)
+        if run_generate and not keep_reports:
+            _cleanup_report_files(json_report, md_report)
+
     return 0
+
+
+def _cleanup_report_files(json_report: Path, md_report: Path) -> None:
+    """Remove report files after successful apply."""
+    import contextlib
+
+    for report_file in [json_report, md_report]:
+        if report_file.exists():
+            with contextlib.suppress(OSError):
+                report_file.unlink()
 
 
 def print_help() -> None:
@@ -103,6 +132,7 @@ OPTIONS:
     --help, -h       Show this help message
     --generate       Run only the generate step (create upgrade report)
     --apply          Run only the apply step (apply upgrades from report)
+    --keep-reports   Keep report files after successful apply (default: delete)
 
     If neither --generate nor --apply is specified, both steps are run.
 
@@ -117,6 +147,7 @@ EXAMPLES:
     go-patch-it                         # Generate report and apply upgrades
     go-patch-it --generate              # Only generate report
     go-patch-it --apply                 # Only apply upgrades from patch-upgrades.json
+    go-patch-it --keep-reports          # Keep report files after apply
     go-patch-it --version               # Print version
     go-patch-it --root /path/to/repo    # Specify repository root
     go-patch-it --dry-run               # Preview changes without applying
