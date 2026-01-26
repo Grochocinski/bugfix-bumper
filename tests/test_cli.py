@@ -367,6 +367,18 @@ class TestCLIReportCleanup:
         output = captured_output.getvalue()
         assert "--keep-reports" in output
 
+    def test_help_includes_yes_flag(self):
+        """Help message includes -y/--yes option."""
+        from io import StringIO
+
+        captured_output = StringIO()
+        with patch("sys.stdout", captured_output):
+            main(["--help"])
+
+        output = captured_output.getvalue()
+        assert "-y, --yes" in output
+        assert "Skip confirmation" in output
+
 
 class TestCLIPostApplyScan:
     """Tests for post-apply scan feature."""

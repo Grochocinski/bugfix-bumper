@@ -156,6 +156,50 @@ class TestApplyMainExecution:
         mock_input.assert_not_called()
         mock_apply.assert_called_once()
 
+    def test_yes_flag_skips_confirmation(self, tmp_path, mocker):
+        """Test that --yes flag skips confirmation prompt."""
+        upgrades = [
+            {
+                "package": "express",
+                "location": "package.json",
+                "current": "4.18.1",
+                "proposed": "4.18.2",
+            }
+        ]
+        upgrades_file = tmp_path / "upgrades.json"
+        upgrades_file.write_text(json.dumps(upgrades))
+        (tmp_path / "package.json").write_text('{"dependencies": {"express": "4.18.1"}}')
+
+        mock_input = mocker.patch("builtins.input")
+        mock_apply = mocker.patch("go_patch_it.apply.apply_upgrades")
+
+        exit_code = main(["--root", str(tmp_path), str(upgrades_file), "--yes"])
+        assert exit_code == 0
+        mock_input.assert_not_called()
+        mock_apply.assert_called_once()
+
+    def test_yes_short_flag_skips_confirmation(self, tmp_path, mocker):
+        """Test that -y short flag skips confirmation prompt."""
+        upgrades = [
+            {
+                "package": "express",
+                "location": "package.json",
+                "current": "4.18.1",
+                "proposed": "4.18.2",
+            }
+        ]
+        upgrades_file = tmp_path / "upgrades.json"
+        upgrades_file.write_text(json.dumps(upgrades))
+        (tmp_path / "package.json").write_text('{"dependencies": {"express": "4.18.1"}}')
+
+        mock_input = mocker.patch("builtins.input")
+        mock_apply = mocker.patch("go_patch_it.apply.apply_upgrades")
+
+        exit_code = main(["--root", str(tmp_path), str(upgrades_file), "-y"])
+        assert exit_code == 0
+        mock_input.assert_not_called()
+        mock_apply.assert_called_once()
+
     def test_successful_apply(self, tmp_path, mocker):
         """Test successful apply with user confirmation."""
         upgrades = [

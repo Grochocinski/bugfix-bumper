@@ -62,6 +62,12 @@ NOTES:
         action="store_true",
         help="Show what would be changed without making any modifications (skips confirmation prompt)",
     )
+    parser.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="Skip confirmation prompt and apply all upgrades automatically",
+    )
 
     args = parser.parse_args(argv)
 
@@ -145,8 +151,8 @@ NOTES:
         print(f"  - {location}")
     print()
 
-    # Skip confirmation prompt in dry-run mode
-    if not args.dry_run:
+    # Skip confirmation prompt in dry-run mode or with --yes flag
+    if not args.dry_run and not args.yes:
         response = input("Continue? [y/N]: ").strip().lower()
         if response != "y":
             print("Cancelled.")

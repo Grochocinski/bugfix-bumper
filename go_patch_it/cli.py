@@ -211,6 +211,7 @@ COMMON ARGUMENTS (passed to subcommands):
     -r, --root DIR           Repository root directory (default: current directory)
     -o, --output-dir DIR     Output directory for reports (default: current directory)
     -p, --package-manager PM Force package manager: yarn, npm, or go (default: auto-detect)
+    -y, --yes                Skip confirmation prompt and apply upgrades automatically
     --dry-run                Preview changes without applying them
     --backup                 Create backups before applying changes
 
